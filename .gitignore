@@ -49,3 +49,24 @@ Thumbs.db
 # Temporary folders
 tmp/
 temp/
+
+# Docker
+.dockerignore
+# Зберігаємо docker-compose.yml та Dockerfile в git
+
+# Backup files
+*.backup
+*.bak
+backup_*/
+
+# Windows PowerShell execution policy (optional)
+# deploy.ps1.Identifier
+
+# Local data that shouldn't be in git
+data/bot.db
+data/backups/
+logs/*.log
+
+# Keep example files and directories structure
+!data/.gitkeep
+!logs/.gitkeep

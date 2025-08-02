@@ -383,6 +383,16 @@ class CommandHandler {
         );
         return;
       }
+
+      // Додаткова перевірка для пошукових запитів (3 на годину)
+      const searchCheck = throttleService.canMakeSearchQuery(userId);
+      if (!searchCheck.allowed) {
+        // Тихо ігноруємо перевищення ліміту пошуку - не відправляємо повідомлення
+        console.log(
+          `🔍 Search throttled for user ${userId}: reached 3 queries per hour limit`
+        );
+        return;
+      }
     }
 
     const query = msg.text.replace("/search", "").replace("/пошук", "").trim();
@@ -466,6 +476,16 @@ class CommandHandler {
           chatId,
           bot,
           msg.message_id
+        );
+        return;
+      }
+
+      // Додаткова перевірка для пошукових запитів (3 на годину)
+      const searchCheck = throttleService.canMakeSearchQuery(userId);
+      if (!searchCheck.allowed) {
+        // Тихо ігноруємо перевищення ліміту пошуку - не відправляємо повідомлення
+        console.log(
+          `🔍 Factcheck throttled for user ${userId}: reached 3 queries per hour limit`
         );
         return;
       }
@@ -554,6 +574,16 @@ class CommandHandler {
           chatId,
           bot,
           msg.message_id
+        );
+        return;
+      }
+
+      // Додаткова перевірка для пошукових запитів (3 на годину)
+      const searchCheck = throttleService.canMakeSearchQuery(userId);
+      if (!searchCheck.allowed) {
+        // Тихо ігноруємо перевищення ліміту пошуку - не відправляємо повідомлення
+        console.log(
+          `📰 News throttled for user ${userId}: reached 3 queries per hour limit`
         );
         return;
       }

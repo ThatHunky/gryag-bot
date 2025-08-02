@@ -15,6 +15,12 @@ class ThrottleService {
     // Rate limiting: userId -> { count: number, resetTime: timestamp }
     this.rateLimits = new Map();
 
+    // Search query throttling: userId -> { count: number, resetTime: timestamp }
+    this.searchThrottling = new Map();
+
+    // Gryag mention throttling: userId -> { count: number, resetTime: timestamp }
+    this.gryagMentionThrottling = new Map();
+
     // Configuration
     this.config = {
       // User cooldowns (milliseconds)
@@ -34,6 +40,18 @@ class ThrottleService {
       rateLimit: {
         user: 20, // 20 messages per minute per user
         admin: 60, // 60 messages per minute for admins
+        windowMs: 60000, // 1 minute window
+      },
+
+      // Search query throttling
+      searchThrottling: {
+        maxSearches: 3, // 3 search queries per hour per user
+        windowMs: 3600000, // 1 hour window
+      },
+
+      // Gryag mention throttling
+      gryagMentionThrottling: {
+        maxMentions: 3, // 3 mentions per minute per user
         windowMs: 60000, // 1 minute window
       },
 
@@ -181,6 +199,86 @@ class ThrottleService {
   }
 
   /**
+   * Check if user can make a search query (3 per hour limit)
+   * @param {number} userId - Telegram user ID
+   * @returns {Object} { allowed: boolean, remaining?: number, reason?: string, resetTime?: number }
+   */
+  canMakeSearchQuery(userId) {
+    const now = Date.now();
+    const maxSearches = this.config.searchThrottling.maxSearches;
+    const windowMs = this.config.searchThrottling.windowMs;
+
+    // Адміни мають необмежений доступ
+    if (this.isAdmin(userId)) {
+      return { allowed: true, remaining: maxSearches };
+    }
+
+    const searchRecord = this.searchThrottling.get(userId);
+
+    if (!searchRecord || now - searchRecord.resetTime >= windowMs) {
+      // First search or window expired - reset counter
+      this.searchThrottling.set(userId, {
+        count: 1,
+        resetTime: now + windowMs,
+      });
+      return { allowed: true, remaining: maxSearches - 1 };
+    }
+
+    if (searchRecord.count >= maxSearches) {
+      return {
+        allowed: false,
+        resetTime: searchRecord.resetTime,
+        reason: "search_limit",
+        remaining: 0,
+      };
+    }
+
+    // Increment counter
+    searchRecord.count++;
+    return { allowed: true, remaining: maxSearches - searchRecord.count };
+  }
+
+  /**
+   * Check if user can mention Gryag (3 per minute limit)
+   * @param {number} userId - Telegram user ID
+   * @returns {Object} { allowed: boolean, remaining?: number, reason?: string, resetTime?: number }
+   */
+  canMentionGryag(userId) {
+    const now = Date.now();
+    const maxMentions = this.config.gryagMentionThrottling.maxMentions;
+    const windowMs = this.config.gryagMentionThrottling.windowMs;
+
+    // Адміни мають необмежений доступ
+    if (this.isAdmin(userId)) {
+      return { allowed: true, remaining: maxMentions };
+    }
+
+    const mentionRecord = this.gryagMentionThrottling.get(userId);
+
+    if (!mentionRecord || now - mentionRecord.resetTime >= windowMs) {
+      // First mention or window expired - reset counter
+      this.gryagMentionThrottling.set(userId, {
+        count: 1,
+        resetTime: now + windowMs,
+      });
+      return { allowed: true, remaining: maxMentions - 1 };
+    }
+
+    if (mentionRecord.count >= maxMentions) {
+      return {
+        allowed: false,
+        resetTime: mentionRecord.resetTime,
+        reason: "mention_limit",
+        remaining: 0,
+      };
+    }
+
+    // Increment counter
+    mentionRecord.count++;
+    return { allowed: true, remaining: maxMentions - mentionRecord.count };
+  }
+
+  /**
    * Get formatted time string for cooldown messages
    * @param {number} milliseconds - Time in milliseconds
    * @returns {string} Formatted time string
@@ -205,6 +303,8 @@ class ThrottleService {
   getUserStats(userId) {
     const userRecord = this.userCooldowns.get(userId);
     const rateRecord = this.rateLimits.get(userId);
+    const searchRecord = this.searchThrottling.get(userId);
+    const mentionRecord = this.gryagMentionThrottling.get(userId);
 
     return {
       messageCount: userRecord?.messageCount || 0,
@@ -217,6 +317,23 @@ class ThrottleService {
           (this.isAdmin(userId)
             ? this.config.rateLimit.admin
             : this.config.rateLimit.user) - (rateRecord?.count || 0)
+        ),
+      },
+      searchThrottling: {
+        count: searchRecord?.count || 0,
+        resetTime: searchRecord?.resetTime || null,
+        remaining: Math.max(
+          0,
+          this.config.searchThrottling.maxSearches - (searchRecord?.count || 0)
+        ),
+      },
+      gryagMentions: {
+        count: mentionRecord?.count || 0,
+        resetTime: mentionRecord?.resetTime || null,
+        remaining: Math.max(
+          0,
+          this.config.gryagMentionThrottling.maxMentions -
+            (mentionRecord?.count || 0)
         ),
       },
     };
@@ -238,6 +355,8 @@ class ThrottleService {
   resetUser(userId) {
     this.userCooldowns.delete(userId);
     this.rateLimits.delete(userId);
+    this.searchThrottling.delete(userId);
+    this.gryagMentionThrottling.delete(userId);
   }
 
   /**
@@ -285,8 +404,22 @@ class ThrottleService {
       }
     }
 
+    // Clean search throttling that have expired
+    for (const [userId, record] of this.searchThrottling.entries()) {
+      if (now > record.resetTime) {
+        this.searchThrottling.delete(userId);
+      }
+    }
+
+    // Clean mention throttling that have expired
+    for (const [userId, record] of this.gryagMentionThrottling.entries()) {
+      if (now > record.resetTime) {
+        this.gryagMentionThrottling.delete(userId);
+      }
+    }
+
     console.log(
-      `🧹 Throttle cleanup completed. Active records: Users=${this.userCooldowns.size}, Chats=${this.chatCooldowns.size}, Rates=${this.rateLimits.size}`
+      `🧹 Throttle cleanup completed. Active records: Users=${this.userCooldowns.size}, Chats=${this.chatCooldowns.size}, Rates=${this.rateLimits.size}, Search=${this.searchThrottling.size}, Mentions=${this.gryagMentionThrottling.size}`
     );
   }
 
@@ -299,6 +432,8 @@ class ThrottleService {
       activeUsers: this.userCooldowns.size,
       activeChats: this.chatCooldowns.size,
       activeRateLimits: this.rateLimits.size,
+      activeSearchThrottling: this.searchThrottling.size,
+      activeGryagMentions: this.gryagMentionThrottling.size,
       config: this.config,
     };
   }

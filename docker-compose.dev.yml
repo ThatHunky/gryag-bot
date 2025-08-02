@@ -1,0 +1,57 @@
+version: "3.8"
+
+services:
+  gryag-bot-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    container_name: gryag-bot-dev
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=development
+      - BOT_TOKEN=${BOT_TOKEN}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - ADMIN_USER_IDS=${ADMIN_USER_IDS}
+      - BOT_USERNAME=${BOT_USERNAME}
+      - MAX_CONTEXT_MESSAGES=${MAX_CONTEXT_MESSAGES:-100}
+      - CONTEXT_MESSAGES_FOR_AI=${CONTEXT_MESSAGES_FOR_AI:-20}
+      - GOOGLE_SEARCH_API_KEY=${GOOGLE_SEARCH_API_KEY}
+      - GOOGLE_SEARCH_ENGINE_ID=${GOOGLE_SEARCH_ENGINE_ID}
+      - AUTO_UPDATE_ENABLED=false # Вимкнено для розробки
+      - TZ=${TZ:-Europe/Kiev}
+
+    volumes:
+      # Монтування коду для hot reload
+      - ./src:/app/src
+      - ./config:/app/config
+      - ./data:/app/data
+      - ./logs:/var/log
+      # Виключення node_modules з монтування
+      - /app/node_modules
+
+    ports:
+      - "3000:3000"
+      - "9229:9229" # Debug port
+
+    # Команда для розробки з nodemon
+    command: npm run dev
+
+    # Health check для розробки
+    healthcheck:
+      test: ["CMD", "node", "/app/scripts/healthcheck.js"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+    # Логування
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "1m"
+        max-file: "2"
+
+networks:
+  default:
+    name: gryag-bot-dev-network

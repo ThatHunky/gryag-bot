@@ -1,32 +1,41 @@
 # Gryag Bot
 
-A smart Telegram group chat bot with Google Gemini AI integration. Responds to mentions and replies with intelligent, contextual responses.
+A smart Telegram group chat bot with Google Gemini AI integration, semantic search, Docker deployment, and advanced throttling system.
 
-## Features
+## ✨ Features
 
-- 🤖 **AI-Powered Responses** - Uses Google Gemini for intelligent text generation
+- 🤖 **AI-Powered Responses** - Google Gemini with contextual understanding
+- 🧠 **Semantic Search** - Automatic context retrieval from conversation history
+- 🐳 **Docker Deployment** - Containerized with auto-updates and health monitoring
+- 🔍 **Web Search Integration** - Google Search API with fallback mechanisms
 - 💬 **Group Chat Smart** - Only responds when mentioned or replied to
-- 🎯 **Context Aware** - Understands conversation context and replies
-- ⚡ **Fast & Efficient** - Built with Node.js for optimal performance
-- 🔧 **Easy Setup** - Simple configuration and deployment
-- 🌍 **Multilingual** - Supports Ukrainian and English with auto-detection
-- 🛡️ **Admin Controls** - Disable/enable bot with admin panel
-- 🔒 **Private Chat Status** - Shows bot status in private messages
+- 🎯 **Context Aware** - Understands conversation history and replies intelligently
+- 🌍 **Multilingual** - Ukrainian (default) and English with auto-detection
+- 🛡️ **Admin Controls** - Enable/disable bot, view statistics, manage settings
+- � **Advanced Throttling** - Per-user limits for search queries and mentions
+- 📊 **Database Storage** - SQLite with embeddings and conversation history
+- 🔒 **Anti-Spam Protection** - Multi-layer throttling and rate limiting
 
-## Quick Start
+## 🚀 Quick Start Options
 
-### 1. Get Your API Keys
+### Option 1: Docker (Recommended)
 
-1. **Bot Token**: Message [@BotFather](https://t.me/BotFather) on Telegram
-   - Create a new bot with `/newbot`
-   - Copy your bot token
+```bash
+# Clone repository
+git clone <your-repo-url>
+cd gryag-bot
 
-2. **Gemini API Key**: Get from [Google AI Studio](https://aistudio.google.com/app/apikey)
-   - Sign in with Google account
-   - Create a new API key
-   - Copy the key
+# Copy and configure environment
+cp .env.example .env
+# Edit .env with your tokens
 
-### 2. Setup
+# Deploy with auto-updates
+./deploy.sh        # Linux/macOS
+# or
+./deploy.ps1       # Windows PowerShell
+```
+
+### Option 2: Manual Setup
 
 ```bash
 # Install dependencies
@@ -39,15 +48,10 @@ cp .env.example .env
 BOT_TOKEN=your_bot_token_here
 GEMINI_API_KEY=your_gemini_api_key_here
 BOT_USERNAME=your_bot_username
-```
 
-### 3. Run
-
-```bash
-# Development mode (with auto-restart)
+# Run development mode
 npm run dev
-
-# Production mode
+```
 npm start
 ```
 
@@ -98,9 +102,63 @@ BOT_TOKEN=your_bot_token_here
 BOT_USERNAME=your_bot_username
 BOT_NAME=Your Bot Name
 GEMINI_API_KEY=your_gemini_api_key_here
+GOOGLE_SEARCH_API_KEY=your_google_search_key # Optional
+GOOGLE_SEARCH_ENGINE_ID=your_search_engine_id # Optional
 NODE_ENV=development
 PORT=3000
 ```
+
+## 🚦 Throttling System
+
+The bot includes advanced per-user throttling to prevent spam:
+
+- **Search Queries**: 3 per hour per user
+  - Affects `/search`, `/news`, `/factcheck`, and automatic search
+  - When limit exceeded: Bot silently ignores requests
+
+- **Gryag Mentions**: 3 per minute per user
+  - Affects mentions in group chats (@username, "гряг", "gryag")
+  - When limit exceeded: Bot silently ignores mentions
+
+- **Admin Exemption**: Admins have unlimited access
+- **Silent Enforcement**: No spam notifications to users
+
+## 🐳 Docker Deployment
+
+### Production with Auto-Updates
+
+```bash
+# Quick deploy (recommended)
+./deploy.sh        # Linux/macOS
+# or
+./deploy.ps1       # Windows
+
+# Manual Docker commands
+docker-compose up -d
+
+# View logs
+docker-compose logs -f gryag-bot
+
+# Update
+docker-compose pull && docker-compose up -d
+```
+
+### Development Mode
+
+```bash
+# Run with hot reload
+docker-compose -f docker-compose.dev.yml up --build
+
+# Or traditional development
+npm run dev
+```
+
+### Auto-Update Features
+
+- **Nightly Updates**: Automatically pulls from GitHub at 3:00 AM
+- **Database Backup**: Creates backups before updates
+- **Health Monitoring**: Automatic restart if bot becomes unhealthy
+- **Cross-Platform**: Works on Linux, macOS, and Windows
 
 ## Development
 
@@ -111,8 +169,10 @@ npm install
 # Run in development mode
 npm run dev
 
-# Run tests
-npm test
+# Test systems
+node test-semantic-search.js
+node test-throttling-system.js
+node test-docker-integration.js
 
 # Debug mode
 npm run debug

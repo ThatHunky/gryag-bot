@@ -1,0 +1,76 @@
+version: "3.8"
+
+services:
+  gryag-bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: gryag-bot
+    restart: unless-stopped
+    environment:
+      # Telegram Bot налаштування
+      - BOT_TOKEN=${BOT_TOKEN}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - ADMIN_USER_IDS=${ADMIN_USER_IDS}
+      - BOT_USERNAME=${BOT_USERNAME}
+
+      # Налаштування контексту
+      - MAX_CONTEXT_MESSAGES=${MAX_CONTEXT_MESSAGES:-100}
+      - CONTEXT_MESSAGES_FOR_AI=${CONTEXT_MESSAGES_FOR_AI:-20}
+
+      # Google Search API (опціонально)
+      - GOOGLE_SEARCH_API_KEY=${GOOGLE_SEARCH_API_KEY}
+      - GOOGLE_SEARCH_ENGINE_ID=${GOOGLE_SEARCH_ENGINE_ID}
+
+      # Git налаштування для автооновлення
+      - GITHUB_REPO=${GITHUB_REPO:-https://github.com/yourusername/gryag-bot.git}
+      - GIT_BRANCH=${GIT_BRANCH:-main}
+
+      # Налаштування автооновлення
+      - AUTO_UPDATE_ENABLED=${AUTO_UPDATE_ENABLED:-true}
+      - UPDATE_TIME=${UPDATE_TIME:-03:00}
+
+      # Часовий пояс
+      - TZ=${TZ:-Europe/Kiev}
+
+    volumes:
+      # Постійне збереження бази даних
+      - ./data:/app/data
+      # Логи автооновлення
+      - ./logs:/var/log
+      # Git credentials (якщо потрібно)
+      - ~/.gitconfig:/home/botuser/.gitconfig:ro
+
+    # Мережеві налаштування (опціонально для моніторингу)
+    ports:
+      - "3000:3000"
+
+    # Обмеження ресурсів
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "0.5"
+        reservations:
+          memory: 256M
+          cpus: "0.25"
+
+    # Health check
+    healthcheck:
+      test: ["CMD", "node", "/app/scripts/healthcheck.js"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+    # Логування
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+# Мережа для майбутнього розширення (моніторинг, база даних)
+networks:
+  default:
+    name: gryag-bot-network

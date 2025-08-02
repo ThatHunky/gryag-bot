@@ -8,7 +8,14 @@
     "dev": "nodemon src/app.js",
     "test": "jest",
     "test:watch": "jest --watch",
-    "debug": "node --inspect-brk src/app.js"
+    "debug": "node --inspect-brk src/app.js",
+    "docker:build": "docker-compose build",
+    "docker:start": "docker-compose up -d",
+    "docker:stop": "docker-compose down",
+    "docker:restart": "docker-compose restart",
+    "docker:logs": "docker-compose logs -f",
+    "docker:update": "./deploy.sh update",
+    "docker:status": "./deploy.sh status"
   },
   "keywords": [
     "telegram",

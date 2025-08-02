@@ -85,10 +85,31 @@ class GryagBot {
     process.on("SIGTERM", () => this.stop());
     process.on("SIGINT", () => this.stop());
   }
-  stop() {
-    console.log("🛑 Stopping bot...");
-    this.bot.stopPolling();
-    process.exit(0);
+  async stop() {
+    console.log("🛑 Зупинка бота...");
+
+    try {
+      // Зупинка polling
+      if (this.bot) {
+        await this.bot.stopPolling();
+        console.log("✅ Telegram polling зупинено");
+      }
+
+      // Очищення PID файлу
+      const fs = require("fs");
+      const path = require("path");
+      const pidFile = path.join(__dirname, "..", "..", "bot.pid");
+
+      if (fs.existsSync(pidFile)) {
+        fs.unlinkSync(pidFile);
+        console.log("🗑️ PID файл видалено");
+      }
+
+      console.log("✅ Бот зупинено успішно");
+    } catch (error) {
+      console.error("❌ Помилка при зупинці бота:", error);
+      throw error;
+    }
   }
 }
 
