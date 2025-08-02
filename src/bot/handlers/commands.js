@@ -263,43 +263,58 @@ class CommandHandler {
 
     // Перевірити чи бот має відповідати
     if (!botStateService.shouldRespond(userId)) {
-      const statusMessage = botStateService.getStatusMessage(userId, languageService);
-      return await bot.sendMessage(chatId, statusMessage, { parse_mode: 'HTML' });
+      const statusMessage = botStateService.getStatusMessage(
+        userId,
+        languageService
+      );
+      return await bot.sendMessage(chatId, statusMessage, {
+        parse_mode: "HTML",
+      });
     }
 
     // Check throttling for non-admin users
     if (!botStateService.isAdmin(userId)) {
-      const throttleCheck = throttleService.canProcessMessage(userId, chatId, chatType);
+      const throttleCheck = throttleService.canProcessMessage(
+        userId,
+        chatId,
+        chatType
+      );
       if (!throttleCheck.allowed) {
-        await this.handleThrottleResponse(throttleCheck, userId, chatId, bot, msg.message_id);
+        await this.handleThrottleResponse(
+          throttleCheck,
+          userId,
+          chatId,
+          bot,
+          msg.message_id
+        );
         return;
       }
     }
 
     try {
       // Show typing indicator
-      await bot.sendChatAction(chatId, 'typing');
+      await bot.sendChatAction(chatId, "typing");
 
       // Get statistics
       const chatStats = await databaseService.getChatStats(chatId);
       const cacheStats = embeddingService.getCacheStats();
 
-      let statsMessage = '📊 <b>Статистика бази даних</b>\n\n';
-      
+      let statsMessage = "📊 <b>Статистика бази даних</b>\n\n";
+
       if (chatStats) {
         statsMessage += `💬 <b>Цей чат:</b>\n`;
         statsMessage += `📝 Всього повідомлень: ${chatStats.total_messages}\n`;
         statsMessage += `🧠 З embeddings: ${chatStats.messages_with_embeddings}\n`;
         statsMessage += `👥 Унікальних користувачів: ${chatStats.unique_users}\n`;
-        
+
         if (chatStats.first_message_time) {
           const firstMsg = new Date(chatStats.first_message_time);
-          statsMessage += `📅 Перше повідомлення: ${firstMsg.toLocaleDateString('uk-UA')}\n`;
+          statsMessage += `📅 Перше повідомлення: ${firstMsg.toLocaleDateString("uk-UA")}\n`;
         }
-        
+
         if (chatStats.last_message_time) {
           const lastMsg = new Date(chatStats.last_message_time);
-          statsMessage += `⏰ Останнє повідомлення: ${lastMsg.toLocaleDateString('uk-UA')}\n`;
+          statsMessage += `⏰ Останнє повідомлення: ${lastMsg.toLocaleDateString("uk-UA")}\n`;
         }
       } else {
         statsMessage += `💬 <b>Цей чат:</b>\n📝 Повідомлень поки немає в базі даних\n`;
@@ -318,15 +333,14 @@ class CommandHandler {
       }
 
       await bot.sendMessage(chatId, statsMessage, {
-        parse_mode: 'HTML',
-        reply_to_message_id: msg.message_id
+        parse_mode: "HTML",
+        reply_to_message_id: msg.message_id,
       });
-
     } catch (error) {
-      console.error('Error in stats command:', error);
-      const errorMessage = languageService.getText(userId, 'errorProcessing');
+      console.error("Error in stats command:", error);
+      const errorMessage = languageService.getText(userId, "errorProcessing");
       await bot.sendMessage(chatId, errorMessage, {
-        reply_to_message_id: msg.message_id
+        reply_to_message_id: msg.message_id,
       });
     }
   }

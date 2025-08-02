@@ -42,8 +42,25 @@ Throttling parameters:
 // Core services that other components depend on
 botStateService      // Controls bot enable/disable state, admin checks
 languageService      // Handles UK/EN text, auto-detection, system prompts
-geminiService        // Google AI integration with context-aware responses
+geminiService        // Google AI integration with context-aware responses and semantic search
 throttleService      // Manages message rate limiting and spam prevention
+databaseService      // SQLite database operations for message storage
+embeddingService     // Google Gemini embeddings and semantic search functionality
+```
+
+### Service Integration Map
+
+```javascript
+// Service dependency flow for semantic search
+messages.js → geminiService.saveMessageToDatabase()
+           → databaseService.saveMessage()
+           → embeddingService.processMessage()
+
+// AI response flow with semantic search
+geminiService.generateResponse()
+           → embeddingService.findRelevantContext()
+           → databaseService.searchSimilarMessages()
+           → Add context to AI prompt automatically
 ```
 
 ## Critical Behavioral Patterns
@@ -143,6 +160,20 @@ npm run dev          # Uses polling, auto-restarts
 2. Groups: Mention bot `@username` to trigger AI responses
 3. Admin commands: `/admin` only works in private chat
 4. Language switch: Auto-detects Ukrainian vs English
+5. Semantic search: Test with `node test-semantic-search.js`
+6. Database stats: Use `/stats` command to view storage metrics
+
+### Semantic Search Testing
+```bash
+# Test embedding creation and similarity
+node test-semantic-search.js
+
+# Check database statistics via bot
+/stats
+
+# Monitor console logs for embedding operations
+npm run dev
+```
 
 ### Key Integration Points
 
@@ -270,6 +301,89 @@ This architecture enables clean separation between Telegram mechanics, AI integr
 - `/admin` - Administrative panel (admins only, private chats)
 - `/test` - Test AI connectivity and bot status
 - `/lang` - Language selection interface
+- `/stats` - View database and semantic search statistics
+
+### 🔍 Semantic Search Implementation
+
+#### Architecture
+The semantic search system is fully integrated and works automatically:
+
+```javascript
+// Automatic message processing in messages.js
+await geminiService.saveMessageToDatabase(msg, messageType, mediaCaption);
+
+// Automatic context retrieval in gemini.js
+const relevantContext = await embeddingService.findRelevantContext(
+  context.chatId,
+  currentText,
+  3 // Top 3 most relevant messages
+);
+```
+
+#### Key Components
+- **EmbeddingService**: Creates and manages embeddings using `text-embedding-004`
+- **DatabaseService**: Stores messages with embeddings in SQLite
+- **GeminiService**: Automatically integrates semantic search into AI responses
+- **Cache System**: 1000-item embedding cache for performance optimization
+
+#### Automatic Workflow
+1. User sends message → Saved to database with embedding
+2. New AI request → Search for similar messages using cosine similarity  
+3. Top 3 relevant messages added to context automatically
+4. AI generates response with historical context awareness
+
+### 📊 Database Schema Details
+
+```sql
+CREATE TABLE chat_messages (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  chat_id INTEGER NOT NULL,
+  user_id INTEGER NOT NULL,
+  first_name TEXT,
+  last_name TEXT,
+  username TEXT,
+  message_text TEXT,
+  message_type TEXT DEFAULT 'text',
+  media_caption TEXT,
+  embedding BLOB,                    -- Vector embeddings stored as BLOB
+  timestamp INTEGER NOT NULL,
+  reply_to_message_id INTEGER,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+### 🧠 Context Integration Patterns
+
+#### Message Storage Pattern
+```javascript
+// Automatic storage for all message types
+const messageType = this.getMessageType(msg);
+let mediaCaption = null;
+
+if (msg.photo && msg.caption) {
+  mediaCaption = `Фото: ${msg.caption}`;
+} else if (msg.document && msg.caption) {
+  mediaCaption = `Документ: ${msg.caption}`;
+}
+
+await geminiService.saveMessageToDatabase(msg, messageType, mediaCaption);
+```
+
+#### Semantic Search Integration
+```javascript
+// Automatically triggered in AI response generation
+if (currentText.length > 0) {
+  const relevantContext = await embeddingService.findRelevantContext(
+    context.chatId,
+    currentText,
+    3 // Maximum 3 relevant messages
+  );
+  
+  if (relevantContext) {
+    fullPrompt += relevantContext;
+  }
+}
+```
 
 ## AI Agent Behavioral Guidelines
 
@@ -493,4 +607,46 @@ Throttle service includes automatic cleanup:
 - **Admin panel**: Use throttle statistics for performance insights
 - **Bot responsiveness**: Watch for throttle-related delays
 
-This comprehensive system ensures robust, scalable, and maintainable bot architecture with complete anti-spam protection.
+This comprehensive system ensures robust, scalable, and maintainable bot architecture with complete anti-spam protection and intelligent semantic search capabilities.
+
+## Project Files Overview
+
+### Core Bot Files
+- `src/app.js` - Main application entry point
+- `src/bot/index.js` - Bot initialization and setup
+- `config/bot.js` - Configuration management
+
+### Handlers
+- `src/bot/handlers/commands.js` - Command processing including `/stats`
+- `src/bot/handlers/messages.js` - Message handling with auto-database saving
+- `src/bot/handlers/callbacks.js` - Inline keyboard callback processing
+
+### Services
+- `src/bot/services/botState.js` - Bot enable/disable state management
+- `src/bot/services/language.js` - Multilingual support (needs restoration if empty)
+- `src/bot/services/gemini.js` - AI integration with semantic search
+- `src/bot/services/throttle.js` - Anti-spam protection
+- `src/bot/services/database.js` - SQLite operations for messages
+- `src/bot/services/embedding.js` - Gemini embeddings and search
+
+### Testing and Documentation
+- `test-semantic-search.js` - Comprehensive semantic search testing
+- `test-phrases.js` - Language detection testing
+- `throttle-test.js` - Throttling system validation
+- `SEMANTIC_SEARCH_GUIDE.md` - Complete semantic search documentation
+- `README.md` - Main project documentation
+
+### Configuration
+- `.env.example` - Environment variables template
+- `package.json` - Dependencies and scripts
+- `.gitignore` - Git exclusions
+
+## Important Notes
+
+⚠️ **Language Service Issue**: If `language.js` is empty, restore it from git or recreate with multilingual text keys.
+
+🔍 **Semantic Search**: Fully automatic - no user commands needed, works transparently during conversations.
+
+📊 **Monitoring**: Use `/stats` command to monitor database growth and embedding cache usage.
+
+🧪 **Testing**: Run `node test-semantic-search.js` to validate system functionality before production use.

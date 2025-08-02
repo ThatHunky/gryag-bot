@@ -23,15 +23,15 @@ class MessageHandler {
     // Визначаємо тип повідомлення та медіа-опис
     const messageType = this.getMessageType(msg);
     let mediaCaption = null;
-    
+
     if (msg.photo && msg.caption) {
       mediaCaption = `Фото: ${msg.caption}`;
     } else if (msg.document && msg.caption) {
       mediaCaption = `Документ: ${msg.caption}`;
     } else if (msg.voice) {
-      mediaCaption = 'Голосове повідомлення';
+      mediaCaption = "Голосове повідомлення";
     } else if (msg.sticker) {
-      mediaCaption = `Стікер: ${msg.sticker.emoji || ''}`;
+      mediaCaption = `Стікер: ${msg.sticker.emoji || ""}`;
     }
 
     // Зберігаємо повідомлення до бази даних
@@ -207,8 +207,8 @@ class MessageHandler {
         // 💾 ЗБЕРЕГТИ ВІДПОВІДЬ БОТА до бази даних
         if (sentMessage) {
           await geminiService.saveBotResponseToDatabase(
-            msg.chat.id, 
-            response, 
+            msg.chat.id,
+            response,
             msg.message_id
           );
         }
@@ -318,8 +318,8 @@ class MessageHandler {
         // 💾 ЗБЕРЕГТИ ВІДПОВІДЬ БОТА до бази даних
         if (sentMessage) {
           await geminiService.saveBotResponseToDatabase(
-            chatId, 
-            response, 
+            chatId,
+            response,
             msg.message_id
           );
         }

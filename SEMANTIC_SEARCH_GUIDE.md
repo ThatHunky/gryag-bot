@@ -80,7 +80,7 @@ npm start
 
 ### База даних
 - **Тип**: SQLite3
-- **Таблиці**: 
+- **Таблиці**:
   - `chat_messages` - повідомлення з embeddings
   - `user_preferences` - налаштування користувачів
 

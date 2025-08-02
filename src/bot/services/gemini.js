@@ -171,14 +171,14 @@ class GeminiService {
 
         // 🔍 АВТОМАТИЧНИЙ СЕМАНТИЧНИЙ ПОШУК
         // Шукаємо релевантний контекст з історії чату
-        const currentText = currentMessage.text || currentMessage.caption || '';
+        const currentText = currentMessage.text || currentMessage.caption || "";
         if (currentText.length > 0) {
           const relevantContext = await embeddingService.findRelevantContext(
             context.chatId,
             currentText,
             3 // Максимум 3 релевантних повідомлення
           );
-          
+
           if (relevantContext) {
             fullPrompt += relevantContext;
           }
@@ -531,60 +531,68 @@ class GeminiService {
   }
 
   // 💾 АВТОМАТИЧНЕ ЗБЕРЕЖЕННЯ ПОВІДОМЛЕНЬ до бази даних з embeddings
-  async saveMessageToDatabase(message, messageType = 'text', mediaCaption = null) {
+  async saveMessageToDatabase(
+    message,
+    messageType = "text",
+    mediaCaption = null
+  ) {
     try {
       const messageData = {
         chatId: message.chat.id,
         userId: message.from.id,
-        firstName: message.from.first_name || '',
-        lastName: message.from.last_name || '',
-        username: message.from.username || '',
-        messageText: message.text || '',
+        firstName: message.from.first_name || "",
+        lastName: message.from.last_name || "",
+        username: message.from.username || "",
+        messageText: message.text || "",
         messageType,
         mediaCaption,
         timestamp: message.date * 1000, // Telegram uses seconds, we use milliseconds
-        replyToMessageId: message.reply_to_message?.message_id || null
+        replyToMessageId: message.reply_to_message?.message_id || null,
       };
 
       // Автоматично створюємо embedding і зберігаємо
       const messageId = await embeddingService.processMessage(messageData);
-      
+
       if (messageId) {
         console.log(`💾 Saved message ${messageId} to database with embedding`);
       }
 
       return messageId;
     } catch (error) {
-      console.error('❌ Error saving message to database:', error);
+      console.error("❌ Error saving message to database:", error);
       return null;
     }
   }
 
   // Зберегти відповідь бота до бази даних
-  async saveBotResponseToDatabase(chatId, responseText, replyToMessageId = null) {
+  async saveBotResponseToDatabase(
+    chatId,
+    responseText,
+    replyToMessageId = null
+  ) {
     try {
       const botMessageData = {
         chatId,
         userId: 0, // Bot ID is 0
-        firstName: 'Gryag Bot',
-        lastName: '',
-        username: process.env.BOT_USERNAME || 'gryag_bot',
+        firstName: "Gryag Bot",
+        lastName: "",
+        username: process.env.BOT_USERNAME || "gryag_bot",
         messageText: responseText,
-        messageType: 'text',
+        messageType: "text",
         mediaCaption: null,
         timestamp: Date.now(),
-        replyToMessageId
+        replyToMessageId,
       };
 
       const messageId = await embeddingService.processMessage(botMessageData);
-      
+
       if (messageId) {
         console.log(`🤖 Saved bot response ${messageId} to database`);
       }
 
       return messageId;
     } catch (error) {
-      console.error('❌ Error saving bot response to database:', error);
+      console.error("❌ Error saving bot response to database:", error);
       return null;
     }
   }
