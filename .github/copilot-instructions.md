@@ -182,12 +182,27 @@ This architecture enables clean separation between Telegram mechanics, AI integr
 ### 🤖 Core Functionality
 
 - **Multilingual Support**: Ukrainian and English with auto-detection (Ukrainian by default)
-- **AI Integration**: Google Gemini for intelligent responses
+- **AI Integration**: Google Gemini for intelligent responses with semantic search
+- **Semantic Search**: Automatic context retrieval from conversation history using embeddings
+- **Database Storage**: SQLite3 for persistent message storage with embeddings
 - **Multimodal Support**: Photos, documents, stickers with vision AI
 - **Smart Chat Behavior**: Different behavior for private vs group chats
 - **Admin Controls**: Enable/disable bot, manage settings, view statistics
 
-### 🛡️ Security & Anti-Spam
+### � Semantic Search System
+
+- **Automatic Integration**: Every AI response includes relevant context from conversation history
+- **Google Gemini Embeddings**: Uses `text-embedding-004` model for high-quality vector representations
+- **SQLite Storage**: Persistent message storage with embedding vectors in BLOB format
+- **Smart Context**: Finds top-3 most relevant messages automatically, no user commands needed
+- **Performance Optimized**: Embedding cache (1000 items) and automatic cleanup
+- **Multilingual**: Supports Ukrainian and English text analysis
+
+### 📊 Database Schema
+
+- **Messages Table**: `chat_messages` with embeddings, user data, and timestamps
+- **Automatic Storage**: All messages saved with metadata and semantic vectors
+- **Context Retrieval**: Real-time similarity search during AI response generation
 
 - **Per-User Throttling**: Individual cooldowns for each user (removed global chat cooldowns)
 - **Admin Exemptions**: Reduced limits for administrators
