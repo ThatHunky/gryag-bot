@@ -1,0 +1,83 @@
+const TelegramBot = require("node-telegram-bot-api");
+const config = require("../../config/bot");
+const commandHandler = require("./handlers/commands");
+const messageHandler = require("./handlers/messages");
+const callbackHandler = require("./handlers/callbacks");
+const geminiService = require("./services/gemini");
+const languageService = require("./services/language");
+
+class GryagBot {
+  constructor() {
+    this.bot = new TelegramBot(config.token, { polling: config.polling });
+    this.setupHandlers();
+    this.setupErrorHandling();
+  }
+
+  setupHandlers() {
+    // Command handlers
+    this.bot.onText(/\/start/, (msg) => commandHandler.start(msg, this.bot));
+    this.bot.onText(/\/help/, (msg) => commandHandler.help(msg, this.bot));
+    this.bot.onText(/\/settings/, (msg) =>
+      commandHandler.settings(msg, this.bot)
+    );
+    this.bot.onText(/\/test/, (msg) => commandHandler.test(msg, this.bot));
+    this.bot.onText(/\/lang/, (msg) => commandHandler.language(msg, this.bot));
+    this.bot.onText(/\/language/, (msg) =>
+      commandHandler.language(msg, this.bot)
+    );
+    this.bot.onText(/\/admin/, (msg) => commandHandler.admin(msg, this.bot));
+    this.bot.onText(/\/stats/, (msg) => commandHandler.stats(msg, this.bot));
+
+    // Status command with multilingual support
+    this.bot.onText(/\/status/, (msg) => {
+      // Skip old messages to prevent startup spam
+      const messageAge = Date.now() / 1000 - msg.date;
+      if (messageAge > 30) return;
+
+      const userId = msg.from.id;
+      const statusMessage = languageService.getText(userId, "status");
+      this.bot.sendMessage(msg.chat.id, statusMessage);
+    });
+
+    // Message handlers (non-commands)
+    this.bot.on("message", (msg) => {
+      if (!msg.text || !msg.text.startsWith("/")) {
+        messageHandler.handleMessage(msg, this.bot);
+      }
+    });
+
+    // Callback query handlers
+    this.bot.on("callback_query", (query) =>
+      callbackHandler.handleCallback(query, this.bot)
+    );
+  }
+
+  setupErrorHandling() {
+    this.bot.on("error", (error) => {
+      console.error("Bot error:", error);
+    });
+
+    this.bot.on("polling_error", (error) => {
+      console.error("Polling error:", error);
+    });
+  }
+
+  start() {
+    console.log(`🚀 ${config.name} started successfully!`);
+    console.log(`📊 Mode: ${config.polling ? "Polling" : "Webhook"}`);
+
+    // Test Gemini connection
+    geminiService.testConnection();
+
+    // Handle graceful shutdown
+    process.on("SIGTERM", () => this.stop());
+    process.on("SIGINT", () => this.stop());
+  }
+  stop() {
+    console.log("🛑 Stopping bot...");
+    this.bot.stopPolling();
+    process.exit(0);
+  }
+}
+
+module.exports = GryagBot;
