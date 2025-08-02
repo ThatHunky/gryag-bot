@@ -253,6 +253,48 @@ class DatabaseService {
     });
   }
 
+  // Get chat statistics
+  async getChatStatistics(chatId = null) {
+    return new Promise((resolve, reject) => {
+      let query;
+      let params = [];
+
+      if (chatId) {
+        query = `
+          SELECT 
+            COUNT(*) as total_messages,
+            COUNT(DISTINCT user_id) as unique_users,
+            COUNT(CASE WHEN embedding IS NOT NULL THEN 1 END) as messages_with_embeddings,
+            MIN(timestamp) as oldest_message,
+            MAX(timestamp) as newest_message
+          FROM chat_messages 
+          WHERE chat_id = ?
+        `;
+        params = [chatId];
+      } else {
+        query = `
+          SELECT 
+            COUNT(*) as total_messages,
+            COUNT(DISTINCT chat_id) as unique_chats,
+            COUNT(DISTINCT user_id) as unique_users,
+            COUNT(CASE WHEN embedding IS NOT NULL THEN 1 END) as messages_with_embeddings,
+            MIN(timestamp) as oldest_message,
+            MAX(timestamp) as newest_message
+          FROM chat_messages
+        `;
+      }
+
+      this.db.get(query, params, (err, row) => {
+        if (err) {
+          console.error("❌ Error getting chat statistics:", err);
+          reject(err);
+        } else {
+          resolve(row);
+        }
+      });
+    });
+  }
+
   // Clean old messages (for privacy and storage management)
   async cleanOldMessages(maxDays = 90) {
     return new Promise((resolve, reject) => {
