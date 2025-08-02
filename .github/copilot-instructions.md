@@ -328,7 +328,7 @@ const relevantContext = await embeddingService.findRelevantContext(
 
 #### Automatic Workflow
 1. User sends message → Saved to database with embedding
-2. New AI request → Search for similar messages using cosine similarity  
+2. New AI request → Search for similar messages using cosine similarity
 3. Top 3 relevant messages added to context automatically
 4. AI generates response with historical context awareness
 
@@ -378,7 +378,7 @@ if (currentText.length > 0) {
     currentText,
     3 // Maximum 3 relevant messages
   );
-  
+
   if (relevantContext) {
     fullPrompt += relevantContext;
   }
