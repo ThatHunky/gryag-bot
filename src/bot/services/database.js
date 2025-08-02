@@ -261,19 +261,19 @@ class DatabaseService {
 
       if (chatId) {
         query = `
-          SELECT 
+          SELECT
             COUNT(*) as total_messages,
             COUNT(DISTINCT user_id) as unique_users,
             COUNT(CASE WHEN embedding IS NOT NULL THEN 1 END) as messages_with_embeddings,
             MIN(timestamp) as oldest_message,
             MAX(timestamp) as newest_message
-          FROM chat_messages 
+          FROM chat_messages
           WHERE chat_id = ?
         `;
         params = [chatId];
       } else {
         query = `
-          SELECT 
+          SELECT
             COUNT(*) as total_messages,
             COUNT(DISTINCT chat_id) as unique_chats,
             COUNT(DISTINCT user_id) as unique_users,
