@@ -28,6 +28,18 @@ class GryagBot {
     this.bot.onText(/\/admin/, (msg) => commandHandler.admin(msg, this.bot));
     this.bot.onText(/\/stats/, (msg) => commandHandler.stats(msg, this.bot));
 
+    // 🔍 Search commands
+    this.bot.onText(/\/search/, (msg) => commandHandler.search(msg, this.bot));
+    this.bot.onText(/\/пошук/, (msg) => commandHandler.search(msg, this.bot));
+    this.bot.onText(/\/factcheck/, (msg) =>
+      commandHandler.factcheck(msg, this.bot)
+    );
+    this.bot.onText(/\/фактчек/, (msg) =>
+      commandHandler.factcheck(msg, this.bot)
+    );
+    this.bot.onText(/\/news/, (msg) => commandHandler.news(msg, this.bot));
+    this.bot.onText(/\/новини/, (msg) => commandHandler.news(msg, this.bot));
+
     // Status command with multilingual support
     this.bot.onText(/\/status/, (msg) => {
       // Skip old messages to prevent startup spam

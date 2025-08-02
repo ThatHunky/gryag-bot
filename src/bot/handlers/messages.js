@@ -3,6 +3,7 @@ const config = require("../../../config/bot");
 const languageService = require("../services/language");
 const botStateService = require("../services/botState");
 const throttleService = require("../services/throttle");
+const searchService = require("../services/search");
 
 class MessageHandler {
   static async handleMessage(msg, bot) {
@@ -184,11 +185,61 @@ class MessageHandler {
       // Show typing indicator
       await bot.sendChatAction(msg.chat.id, "typing");
 
-      // Generate AI response
-      const response = await geminiService.generateContextualResponse(
-        msg,
-        botUsername
-      );
+      let response;
+
+      // 🔍 перевіряємо чи потрібен автоматичний пошук в групі
+      const needsSearch =
+        msg.text &&
+        (searchService.shouldTriggerSearch(msg.text) ||
+          searchService.shouldTriggerFactCheck(msg.text));
+
+      if (needsSearch) {
+        console.log(
+          "🔍 автоматичний пошук в групі для:",
+          msg.text.substring(0, 50) + "..."
+        );
+
+        // контекст для пошуку
+        const searchContext = {
+          chatId: msg.chat.id,
+          userId: msg.from.id,
+          text: msg.text,
+          userName: msg.from.first_name,
+          isReply: false,
+        };
+
+        // якщо це фактчек - використовуємо спеціальний пошук
+        if (searchService.shouldTriggerFactCheck(msg.text)) {
+          // витягуємо пошуковий запит для фактчеку
+          const factCheckQuery = searchService.extractSearchQuery(msg.text);
+          console.log("🔍 фактчек запит:", factCheckQuery);
+
+          const factCheckResults =
+            await searchService.factCheck(factCheckQuery);
+          searchContext.searchResults = factCheckResults;
+          searchContext.text = factCheckQuery; // використовуємо очищений запит
+          response =
+            await geminiService.generateResponseWithSearch(searchContext);
+        } else {
+          // витягуємо пошуковий запит для звичайного пошуку
+          const searchQuery = searchService.extractSearchQuery(msg.text);
+          console.log("🔍 пошуковий запит:", searchQuery);
+
+          const searchResults = await searchService.searchWeb(searchQuery, {
+            limit: 3,
+          });
+          searchContext.searchResults = searchResults;
+          searchContext.text = searchQuery; // використовуємо очищений запит
+          response =
+            await geminiService.generateResponseWithSearch(searchContext);
+        }
+      } else {
+        // Generate AI response без пошуку
+        response = await geminiService.generateContextualResponse(
+          msg,
+          botUsername
+        );
+      }
 
       if (response) {
         // Add bot response to context
@@ -240,10 +291,58 @@ class MessageHandler {
           // Add message to context before generating response
           geminiService.addToContext(msg.chat.id, msg);
 
-          response = await geminiService.generateContextualResponse(
-            msg,
-            config.username
-          );
+          // 🔍 перевіряємо чи потрібен автоматичний пошук
+          const needsSearch =
+            searchService.shouldTriggerSearch(msg.text) ||
+            searchService.shouldTriggerFactCheck(msg.text);
+
+          if (needsSearch) {
+            console.log(
+              "🔍 автоматичний пошук для:",
+              msg.text.substring(0, 50) + "..."
+            );
+
+            // контекст для пошуку
+            const searchContext = {
+              chatId: msg.chat.id,
+              userId: msg.from.id,
+              text: msg.text,
+              userName: msg.from.first_name,
+              isReply: false,
+            };
+
+            // якщо це фактчек - використовуємо спеціальний пошук
+            if (searchService.shouldTriggerFactCheck(msg.text)) {
+              // витягуємо пошуковий запит для фактчеку
+              const factCheckQuery = searchService.extractSearchQuery(msg.text);
+              console.log("🔍 фактчек запит (приватний чат):", factCheckQuery);
+
+              const factCheckResults =
+                await searchService.factCheck(factCheckQuery);
+              searchContext.searchResults = factCheckResults;
+              searchContext.text = factCheckQuery; // використовуємо очищений запит
+              response =
+                await geminiService.generateResponseWithSearch(searchContext);
+            } else {
+              // витягуємо пошуковий запит для звичайного пошуку
+              const searchQuery = searchService.extractSearchQuery(msg.text);
+              console.log("🔍 пошуковий запит (приватний чат):", searchQuery);
+
+              const searchResults = await searchService.searchWeb(searchQuery, {
+                limit: 3,
+              });
+              searchContext.searchResults = searchResults;
+              searchContext.text = searchQuery; // використовуємо очищений запит
+              response =
+                await geminiService.generateResponseWithSearch(searchContext);
+            }
+          } else {
+            // звичайна відповідь без пошуку
+            response = await geminiService.generateContextualResponse(
+              msg,
+              config.username
+            );
+          }
           break;
 
         case "photo":

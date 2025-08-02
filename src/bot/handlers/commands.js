@@ -5,6 +5,7 @@ const botStateService = require("../services/botState");
 const throttleService = require("../services/throttle");
 const databaseService = require("../services/database");
 const embeddingService = require("../services/embedding");
+const searchService = require("../services/search");
 
 class CommandHandler {
   // Helper function to check if message is too old (prevents spam on startup)
@@ -343,6 +344,298 @@ class CommandHandler {
         reply_to_message_id: msg.message_id,
       });
     }
+  }
+
+  // 🔍 КОМАНДА ПОШУКУ
+  static async search(msg, bot) {
+    // Skip old messages to prevent startup spam
+    if (this.isOldMessage(msg)) return;
+
+    const chatId = msg.chat.id;
+    const userId = msg.from.id;
+    const chatType = msg.chat.type;
+
+    // перевіряємо чи бот має відповідати
+    if (!botStateService.shouldRespond(userId)) {
+      const statusMessage = botStateService.getStatusMessage(
+        userId,
+        languageService
+      );
+      return await bot.sendMessage(chatId, statusMessage, {
+        parse_mode: "HTML",
+      });
+    }
+
+    // throttle check для не-адмінів
+    if (!botStateService.isAdmin(userId)) {
+      const throttleCheck = throttleService.canProcessMessage(
+        userId,
+        chatId,
+        chatType
+      );
+      if (!throttleCheck.allowed) {
+        await this.handleThrottleResponse(
+          throttleCheck,
+          userId,
+          chatId,
+          bot,
+          msg.message_id
+        );
+        return;
+      }
+    }
+
+    const query = msg.text.replace("/search", "").replace("/пошук", "").trim();
+    if (!query) {
+      const helpText = languageService.getText(userId, "searchHelp");
+      return await bot.sendMessage(chatId, helpText, {
+        parse_mode: "HTML",
+        reply_to_message_id: msg.message_id,
+      });
+    }
+
+    const searchingText = languageService.getText(userId, "searching");
+    const searchingMsg = await bot.sendMessage(chatId, searchingText, {
+      reply_to_message_id: msg.message_id,
+    });
+
+    try {
+      await bot.sendChatAction(chatId, "typing");
+
+      const results = await searchService.searchWeb(query);
+
+      if (!results || results.length === 0) {
+        const noResultsText = languageService.getText(
+          userId,
+          "noSearchResults"
+        );
+        return await bot.editMessageText(noResultsText, {
+          chat_id: chatId,
+          message_id: searchingMsg.message_id,
+        });
+      }
+
+      const resultsText = this.formatSearchResults(results, userId, query);
+      await bot.editMessageText(resultsText, {
+        chat_id: chatId,
+        message_id: searchingMsg.message_id,
+        parse_mode: "HTML",
+        disable_web_page_preview: false,
+      });
+    } catch (error) {
+      console.error("❌ search command error:", error);
+      const errorText = languageService.getText(userId, "searchError");
+      await bot.editMessageText(errorText, {
+        chat_id: chatId,
+        message_id: searchingMsg.message_id,
+      });
+    }
+  }
+
+  // ✅ КОМАНДА ФАКТЧЕКІНГУ
+  static async factcheck(msg, bot) {
+    // Skip old messages to prevent startup spam
+    if (this.isOldMessage(msg)) return;
+
+    const chatId = msg.chat.id;
+    const userId = msg.from.id;
+    const chatType = msg.chat.type;
+
+    // перевіряємо чи бот має відповідати
+    if (!botStateService.shouldRespond(userId)) {
+      const statusMessage = botStateService.getStatusMessage(
+        userId,
+        languageService
+      );
+      return await bot.sendMessage(chatId, statusMessage, {
+        parse_mode: "HTML",
+      });
+    }
+
+    // throttle check для не-адмінів
+    if (!botStateService.isAdmin(userId)) {
+      const throttleCheck = throttleService.canProcessMessage(
+        userId,
+        chatId,
+        chatType
+      );
+      if (!throttleCheck.allowed) {
+        await this.handleThrottleResponse(
+          throttleCheck,
+          userId,
+          chatId,
+          bot,
+          msg.message_id
+        );
+        return;
+      }
+    }
+
+    const query = msg.text
+      .replace("/factcheck", "")
+      .replace("/фактчек", "")
+      .trim();
+    if (!query) {
+      const helpText = languageService.getText(userId, "factcheckHelp");
+      return await bot.sendMessage(chatId, helpText, {
+        parse_mode: "HTML",
+        reply_to_message_id: msg.message_id,
+      });
+    }
+
+    const checkingText = languageService.getText(userId, "factchecking");
+    const checkingMsg = await bot.sendMessage(chatId, checkingText, {
+      reply_to_message_id: msg.message_id,
+    });
+
+    try {
+      await bot.sendChatAction(chatId, "typing");
+
+      // отримуємо результати фактчекінгу
+      const searchResults = await searchService.factCheck(query);
+
+      // генеруємо відповідь через gemini з результатами пошуку
+      const context = {
+        chatId,
+        userId,
+        text: `фактчек: ${query}`,
+        isReply: false,
+        searchResults: searchResults, // передаємо результати пошуку
+      };
+
+      const response = await geminiService.generateResponseWithSearch(context);
+
+      await bot.editMessageText(response, {
+        chat_id: chatId,
+        message_id: checkingMsg.message_id,
+        parse_mode: "HTML",
+      });
+    } catch (error) {
+      console.error("❌ factcheck error:", error);
+      const errorText = languageService.getText(userId, "factcheckError");
+      await bot.editMessageText(errorText, {
+        chat_id: chatId,
+        message_id: checkingMsg.message_id,
+      });
+    }
+  }
+
+  // 📰 КОМАНДА НОВИН
+  static async news(msg, bot) {
+    // Skip old messages to prevent startup spam
+    if (this.isOldMessage(msg)) return;
+
+    const chatId = msg.chat.id;
+    const userId = msg.from.id;
+    const chatType = msg.chat.type;
+
+    // перевіряємо чи бот має відповідати
+    if (!botStateService.shouldRespond(userId)) {
+      const statusMessage = botStateService.getStatusMessage(
+        userId,
+        languageService
+      );
+      return await bot.sendMessage(chatId, statusMessage, {
+        parse_mode: "HTML",
+      });
+    }
+
+    // throttle check для не-адмінів
+    if (!botStateService.isAdmin(userId)) {
+      const throttleCheck = throttleService.canProcessMessage(
+        userId,
+        chatId,
+        chatType
+      );
+      if (!throttleCheck.allowed) {
+        await this.handleThrottleResponse(
+          throttleCheck,
+          userId,
+          chatId,
+          bot,
+          msg.message_id
+        );
+        return;
+      }
+    }
+
+    const topic =
+      msg.text.replace("/news", "").replace("/новини", "").trim() ||
+      "україна новини";
+
+    const loadingText = languageService.getText(userId, "loadingNews");
+    const loadingMsg = await bot.sendMessage(chatId, loadingText, {
+      reply_to_message_id: msg.message_id,
+    });
+
+    try {
+      await bot.sendChatAction(chatId, "typing");
+
+      const newsResults = await searchService.getNewsUpdate(topic);
+
+      if (!newsResults || newsResults.length === 0) {
+        const noNewsText = languageService.getText(userId, "noNewsFound");
+        return await bot.editMessageText(noNewsText, {
+          chat_id: chatId,
+          message_id: loadingMsg.message_id,
+        });
+      }
+
+      const newsText = this.formatNewsResults(newsResults, userId, topic);
+      await bot.editMessageText(newsText, {
+        chat_id: chatId,
+        message_id: loadingMsg.message_id,
+        parse_mode: "HTML",
+        disable_web_page_preview: false,
+      });
+    } catch (error) {
+      console.error("❌ news command error:", error);
+      const errorText = languageService.getText(userId, "newsError");
+      await bot.editMessageText(errorText, {
+        chat_id: chatId,
+        message_id: loadingMsg.message_id,
+      });
+    }
+  }
+
+  // 🔧 ДОПОМІЖНІ МЕТОДИ ДЛЯ ФОРМАТУВАННЯ
+
+  static formatSearchResults(results, userId, query) {
+    const header = languageService.getText(userId, "searchResults", query);
+
+    const formattedResults = results
+      .map((result, index) => {
+        let emoji = "🔍";
+        if (result.type === "answer") emoji = "💡";
+        else if (result.type === "definition") emoji = "📖";
+        else if (result.type === "abstract") emoji = "ℹ️";
+        else if (result.type === "related") emoji = "🔗";
+
+        let formatted = `${emoji} <b>${result.title}</b>\n`;
+        formatted += `${result.snippet}\n`;
+
+        if (result.link && result.link !== "#") {
+          formatted += `🌐 <a href="${result.link}">${result.displayLink}</a>`;
+        }
+
+        return formatted;
+      })
+      .join("\n\n");
+
+    return `${header}\n\n${formattedResults}`;
+  }
+
+  static formatNewsResults(results, userId, topic) {
+    const header = languageService.getText(userId, "newsResults", topic);
+
+    const formattedResults = results
+      .slice(0, 5)
+      .map((result, index) => {
+        return `📰 <b>${result.title}</b>\n${result.snippet}`;
+      })
+      .join("\n\n");
+
+    return `${header}\n\n${formattedResults}`;
   }
 }
 

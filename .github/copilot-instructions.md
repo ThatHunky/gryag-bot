@@ -690,15 +690,25 @@ This comprehensive system ensures robust, scalable, and maintainable bot archite
 - `src/bot/services/throttle.js` - Anti-spam protection
 - `src/bot/services/database.js` - SQLite operations for messages
 - `src/bot/services/embedding.js` - Gemini embeddings and search
+- `src/bot/services/search.js` - Web search integration with Google API
 
 ### Testing and Documentation
+
 - `test-semantic-search.js` - Comprehensive semantic search testing
+- `test-google-search.js` - Google Search API integration testing
+- `test-query-extraction.js` - Search query parsing validation
+- `test-safety-settings.js` - Gemini safety configuration testing
 - `test-phrases.js` - Language detection testing
 - `throttle-test.js` - Throttling system validation
 - `SEMANTIC_SEARCH_GUIDE.md` - Complete semantic search documentation
+- `GOOGLE_SEARCH_SETUP.md` - Google Search API setup instructions
+- `GOOGLE_SEARCH_INTEGRATION.md` - Google Search integration report
+- `SEARCH_FIX_REPORT.md` - Search query extraction fix report
+- `SAFETY_SETTINGS_REPORT.md` - Gemini safety settings configuration report
 - `README.md` - Main project documentation
 
 ### Configuration
+
 - `.env.example` - Environment variables template
 - `package.json` - Dependencies and scripts
 - `.gitignore` - Git exclusions
@@ -707,26 +717,47 @@ This comprehensive system ensures robust, scalable, and maintainable bot archite
 
 ### ✅ Completed Implementation
 
-1. **Semantic Search System** - Fully operational semantic search using Google Gemini embeddings
+1. **Google Search API Integration** - Complete web search functionality
+   - Google Custom Search API with Ukrainian and English language support
+   - Fallback mechanism: Google → DuckDuckGo → Wikipedia → Basic search
+   - Automatic query extraction from conversational messages
+   - Smart search triggering for news, facts, and information requests
+   - Environment variables: `GOOGLE_SEARCH_API_KEY`, `GOOGLE_SEARCH_ENGINE_ID`
+
+2. **Search Query Processing** - Fixed search functionality
+   - Added `extractSearchQuery()` method to parse clean search terms
+   - "гряг знайди інфу про житомир" → extracts "житомир" for search
+   - Improved search triggers for Ukrainian and English phrases
+   - Integration in both group and private message handlers
+
+3. **Safety Settings Configuration** - Relaxed Gemini content restrictions
+   - Custom safety settings with `BLOCK_NONE` for all categories
+   - Improved error handling for `PROHIBITED_CONTENT` responses
+   - Graceful fallbacks with user-friendly messages instead of technical errors
+
+4. **Semantic Search System** - Fully operational semantic search using Google Gemini embeddings
    - Automatic message storage with vector embeddings
    - Real-time similarity search during AI responses
    - Top-3 relevant context injection without user commands
    - Performance-optimized caching system (1000 items)
 
-2. **Language Service Restoration** - Fixed corrupted language.js file
+5. **Language Service Restoration** - Fixed corrupted language.js file
    - Cross-platform string concatenation approach
    - Ukrainian (default) and English support confirmed
    - All localization keys properly implemented
    - System prompts enhanced for semantic search context
 
-3. **Database Enhancement** - Extended database service with new methods
+6. **Database Enhancement** - Extended database service with new methods
    - `getChatStatistics()` method for monitoring
    - Additional tables for future features (chat_settings, user_preferences)
    - Optimized indexing for performance
    - Comprehensive message storage with embeddings
 
-4. **Testing Infrastructure** - Complete testing suite validation
+7. **Testing Infrastructure** - Complete testing suite validation
    - `test-semantic-search.js` - All tests passing
+   - `test-google-search.js` - Google API integration testing
+   - `test-query-extraction.js` - Search query parsing validation
+   - `test-safety-settings.js` - Gemini safety configuration testing
    - Embedding creation and similarity calculation verified
    - Language service functionality confirmed
    - Cache system operational status validated
@@ -735,6 +766,9 @@ This comprehensive system ensures robust, scalable, and maintainable bot archite
 
 - **Bot Startup**: ✅ Operational (`npm run dev` working correctly)
 - **Semantic Search**: ✅ Fully integrated and automatic
+- **Google Search API**: ✅ Integrated with fallback mechanisms
+- **Search Query Processing**: ✅ Automatic extraction from conversational messages
+- **Safety Settings**: ✅ Configured for minimal content blocking
 - **Database Operations**: ✅ All CRUD operations functional
 - **Testing Suite**: ✅ Comprehensive tests passing
 - **Documentation**: ✅ Updated and current

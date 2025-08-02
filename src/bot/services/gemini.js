@@ -1,4 +1,8 @@
-const { GoogleGenerativeAI } = require("@google/generative-ai");
+const {
+  GoogleGenerativeAI,
+  HarmCategory,
+  HarmBlockThreshold,
+} = require("@google/generative-ai");
 const languageService = require("./language");
 const embeddingService = require("./embedding");
 const fetch = require("node-fetch"); // For image fetching
@@ -21,9 +25,34 @@ class GeminiService {
     }
 
     this.genAI = new GoogleGenerativeAI(this.apiKey);
-    this.model = this.genAI.getGenerativeModel({ model: this.modelName });
+
+    // Налаштування безпеки - більш м'які обмеження
+    const safetySettings = [
+      {
+        category: HarmCategory.HARM_CATEGORY_HARASSMENT,
+        threshold: HarmBlockThreshold.BLOCK_NONE, // Не блокувати harassment
+      },
+      {
+        category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+        threshold: HarmBlockThreshold.BLOCK_NONE, // Не блокувати hate speech
+      },
+      {
+        category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+        threshold: HarmBlockThreshold.BLOCK_NONE, // Блокувати тільки явно сексуальний контент
+      },
+      {
+        category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+        threshold: HarmBlockThreshold.BLOCK_NONE, // Не блокувати небезпечний контент
+      },
+    ];
+
+    this.model = this.genAI.getGenerativeModel({
+      model: this.modelName,
+      safetySettings: safetySettings,
+    });
     this.visionModel = this.genAI.getGenerativeModel({
       model: this.visionModelName,
+      safetySettings: safetySettings,
     });
   }
 
@@ -222,8 +251,106 @@ class GeminiService {
         return languageService.getText(userId, "aiNotConfigured");
       } else if (error.message.includes("quota")) {
         return languageService.getText(userId, "aiQuotaExceeded");
-      } else if (error.message.includes("safety")) {
-        return languageService.getText(userId, "aiSafetyFilter");
+      } else if (
+        error.message.includes("safety") ||
+        error.message.includes("PROHIBITED_CONTENT")
+      ) {
+        // Спробуємо більш нейтральну відповідь
+        console.log(
+          "🛡️ Контент заблокований Gemini в generateResponse, даю нейтральну відповідь"
+        );
+        return "Вибачте, не можу надати відповідь на це запитання. Можете перефразувати або спитати щось інше?";
+      } else {
+        return languageService.getText(userId, "aiGenericError");
+      }
+    }
+  }
+
+  // 🔍 ГЕНЕРАЦІЯ ВІДПОВІДІ З ПОШУКОМ В ІНТЕРНЕТІ
+  async generateResponseWithSearch(context = {}) {
+    if (!this.model) {
+      const userId = context.userId || 0;
+      return languageService.getText(userId, "aiNotConfigured");
+    }
+
+    try {
+      // Get user-specific system prompt
+      const userId = context.userId || 0;
+      const systemPrompt = languageService.getSystemPrompt(userId);
+
+      // Prepare the full prompt with context
+      let fullPrompt = systemPrompt + "\n\n";
+
+      // додаємо результати пошуку якщо є
+      if (context.searchResults && context.searchResults.length > 0) {
+        fullPrompt += "🔍 ІНФОРМАЦІЯ З ІНТЕРНЕТУ ДЛЯ ФАКТЧЕКІНГУ:\n\n";
+
+        context.searchResults.forEach((result, index) => {
+          fullPrompt += `${index + 1}. ${result.title}\n`;
+          fullPrompt += `   ${result.snippet}\n`;
+          fullPrompt += "\n";
+        });
+
+        fullPrompt +=
+          "Використовуй цю інформацію для перевірки фактів, але завжди вказуй джерела. ";
+        fullPrompt +=
+          "Будь критичним до інформації і надавай збалансовану відповідь.\n\n";
+      }
+
+      // Add chat context if available
+      if (context.chatId) {
+        const chatContext = this.getFormattedContext(context.chatId);
+        if (chatContext) {
+          fullPrompt += chatContext;
+        }
+
+        // семантичний пошук в історії чату
+        if (context.text && context.text.length > 0) {
+          const relevantContext = await embeddingService.findRelevantContext(
+            context.chatId,
+            context.text,
+            3
+          );
+
+          if (relevantContext) {
+            fullPrompt += relevantContext;
+          }
+        }
+      }
+
+      // додаємо поточний запит
+      if (context.userName) {
+        fullPrompt += `User ${context.userName} запитує: `;
+      }
+      fullPrompt += context.text;
+
+      console.log(
+        "🤖 генерую відповідь з пошуком для:",
+        context.text.substring(0, 50) + "..."
+      );
+
+      const result = await this.model.generateContent(fullPrompt);
+      const response = await result.response;
+      const text = response.text();
+
+      return text.trim();
+    } catch (error) {
+      console.error("❌ gemini api error з пошуком:", error);
+
+      const userId = context.userId || 0;
+
+      if (error.message.includes("API_KEY")) {
+        return languageService.getText(userId, "aiNotConfigured");
+      } else if (error.message.includes("quota")) {
+        return languageService.getText(userId, "aiQuotaExceeded");
+      } else if (
+        error.message.includes("safety") ||
+        error.message.includes("PROHIBITED_CONTENT")
+      ) {
+        console.log(
+          "🛡️ Контент заблокований Gemini в generateResponseWithSearch, даю нейтральну відповідь"
+        );
+        return "Вибачте, не можу надати відповідь на це запитання. Можете перефразувати або спитати щось інше?";
       } else {
         return languageService.getText(userId, "aiGenericError");
       }
@@ -292,8 +419,14 @@ class GeminiService {
     } catch (error) {
       console.error("Gemini Vision API error:", error);
 
-      if (error.message.includes("safety")) {
-        return languageService.getText(userId, "aiSafetyFilter");
+      if (
+        error.message.includes("safety") ||
+        error.message.includes("PROHIBITED_CONTENT")
+      ) {
+        console.log(
+          "🛡️ Контент заблокований Gemini Vision, даю нейтральну відповідь"
+        );
+        return "Вибачте, не можу проаналізувати це зображення. Спробуйте інше або запитайте щось інше.";
       } else {
         return languageService.getText(userId, "aiGenericError");
       }
@@ -325,8 +458,14 @@ class GeminiService {
     } catch (error) {
       console.error("Gemini Document API error:", error);
 
-      if (error.message.includes("safety")) {
-        return languageService.getText(userId, "aiSafetyFilter");
+      if (
+        error.message.includes("safety") ||
+        error.message.includes("PROHIBITED_CONTENT")
+      ) {
+        console.log(
+          "🛡️ Контент заблокований Gemini Document, даю нейтральну відповідь"
+        );
+        return "Вибачте, не можу проаналізувати цей документ. Спробуйте інший або запитайте щось інше.";
       } else {
         return languageService.getText(userId, "aiGenericError");
       }
