@@ -1,4 +1,4 @@
-const fetch = require("node-fetch");
+// Relies on the global `fetch` available in Node.js 18+
 
 class SearchService {
   constructor() {
