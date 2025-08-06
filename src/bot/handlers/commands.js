@@ -14,6 +14,42 @@ class CommandHandler {
     return messageAge > 30; // Ignore messages older than 30 seconds
   }
 
+  static async validateCommand(msg, bot, options = {}) {
+    if (this.isOldMessage(msg)) return null;
+
+    const { enforceSearchLimit = false, searchLogEmoji = "🔍", searchLogLabel = "Search" } = options;
+
+    const chatId = msg.chat.id;
+    const userId = msg.from.id;
+    const chatType = msg.chat.type;
+
+    if (!botStateService.shouldRespond(userId)) {
+      const statusMessage = botStateService.getStatusMessage(userId, languageService);
+      await bot.sendMessage(chatId, statusMessage, { parse_mode: "HTML" });
+      return null;
+    }
+
+    if (!botStateService.isAdmin(userId)) {
+      const throttleCheck = throttleService.canProcessMessage(userId, chatId, chatType);
+      if (!throttleCheck.allowed) {
+        await this.handleThrottleResponse(throttleCheck, userId, chatId, bot, msg.message_id);
+        return null;
+      }
+
+      if (enforceSearchLimit) {
+        const searchCheck = throttleService.canMakeSearchQuery(userId);
+        if (!searchCheck.allowed) {
+          console.log(
+            `${searchLogEmoji} ${searchLogLabel} throttled for user ${userId}: reached 3 queries per hour limit`
+          );
+          return null;
+        }
+      }
+    }
+
+    return { chatId, userId, chatType };
+  }
+
   static async start(msg, bot) {
     // Skip old messages to prevent startup spam
     if (this.isOldMessage(msg)) return;
@@ -255,42 +291,10 @@ class CommandHandler {
 
   // 📊 КОМАНДА СТАТИСТИКИ БАЗИ ДАНИХ
   static async stats(msg, bot) {
-    // Skip old messages to prevent startup spam
-    if (this.isOldMessage(msg)) return;
+    const context = await this.validateCommand(msg, bot);
+    if (!context) return;
 
-    const chatId = msg.chat.id;
-    const userId = msg.from.id;
-    const chatType = msg.chat.type;
-
-    // Перевірити чи бот має відповідати
-    if (!botStateService.shouldRespond(userId)) {
-      const statusMessage = botStateService.getStatusMessage(
-        userId,
-        languageService
-      );
-      return await bot.sendMessage(chatId, statusMessage, {
-        parse_mode: "HTML",
-      });
-    }
-
-    // Check throttling for non-admin users
-    if (!botStateService.isAdmin(userId)) {
-      const throttleCheck = throttleService.canProcessMessage(
-        userId,
-        chatId,
-        chatType
-      );
-      if (!throttleCheck.allowed) {
-        await this.handleThrottleResponse(
-          throttleCheck,
-          userId,
-          chatId,
-          bot,
-          msg.message_id
-        );
-        return;
-      }
-    }
+    const { chatId, userId } = context;
 
     try {
       // Show typing indicator
@@ -348,52 +352,14 @@ class CommandHandler {
 
   // 🔍 КОМАНДА ПОШУКУ
   static async search(msg, bot) {
-    // Skip old messages to prevent startup spam
-    if (this.isOldMessage(msg)) return;
+    const context = await this.validateCommand(msg, bot, {
+      enforceSearchLimit: true,
+      searchLogEmoji: "🔍",
+      searchLogLabel: "Search",
+    });
+    if (!context) return;
 
-    const chatId = msg.chat.id;
-    const userId = msg.from.id;
-    const chatType = msg.chat.type;
-
-    // перевіряємо чи бот має відповідати
-    if (!botStateService.shouldRespond(userId)) {
-      const statusMessage = botStateService.getStatusMessage(
-        userId,
-        languageService
-      );
-      return await bot.sendMessage(chatId, statusMessage, {
-        parse_mode: "HTML",
-      });
-    }
-
-    // throttle check для не-адмінів
-    if (!botStateService.isAdmin(userId)) {
-      const throttleCheck = throttleService.canProcessMessage(
-        userId,
-        chatId,
-        chatType
-      );
-      if (!throttleCheck.allowed) {
-        await this.handleThrottleResponse(
-          throttleCheck,
-          userId,
-          chatId,
-          bot,
-          msg.message_id
-        );
-        return;
-      }
-
-      // Додаткова перевірка для пошукових запитів (3 на годину)
-      const searchCheck = throttleService.canMakeSearchQuery(userId);
-      if (!searchCheck.allowed) {
-        // Тихо ігноруємо перевищення ліміту пошуку - не відправляємо повідомлення
-        console.log(
-          `🔍 Search throttled for user ${userId}: reached 3 queries per hour limit`
-        );
-        return;
-      }
-    }
+    const { chatId, userId } = context;
 
     const query = msg.text.replace("/search", "").replace("/пошук", "").trim();
     if (!query) {
@@ -444,52 +410,14 @@ class CommandHandler {
 
   // ✅ КОМАНДА ФАКТЧЕКІНГУ
   static async factcheck(msg, bot) {
-    // Skip old messages to prevent startup spam
-    if (this.isOldMessage(msg)) return;
+    const context = await this.validateCommand(msg, bot, {
+      enforceSearchLimit: true,
+      searchLogEmoji: "🔍",
+      searchLogLabel: "Factcheck",
+    });
+    if (!context) return;
 
-    const chatId = msg.chat.id;
-    const userId = msg.from.id;
-    const chatType = msg.chat.type;
-
-    // перевіряємо чи бот має відповідати
-    if (!botStateService.shouldRespond(userId)) {
-      const statusMessage = botStateService.getStatusMessage(
-        userId,
-        languageService
-      );
-      return await bot.sendMessage(chatId, statusMessage, {
-        parse_mode: "HTML",
-      });
-    }
-
-    // throttle check для не-адмінів
-    if (!botStateService.isAdmin(userId)) {
-      const throttleCheck = throttleService.canProcessMessage(
-        userId,
-        chatId,
-        chatType
-      );
-      if (!throttleCheck.allowed) {
-        await this.handleThrottleResponse(
-          throttleCheck,
-          userId,
-          chatId,
-          bot,
-          msg.message_id
-        );
-        return;
-      }
-
-      // Додаткова перевірка для пошукових запитів (3 на годину)
-      const searchCheck = throttleService.canMakeSearchQuery(userId);
-      if (!searchCheck.allowed) {
-        // Тихо ігноруємо перевищення ліміту пошуку - не відправляємо повідомлення
-        console.log(
-          `🔍 Factcheck throttled for user ${userId}: reached 3 queries per hour limit`
-        );
-        return;
-      }
-    }
+    const { chatId, userId } = context;
 
     const query = msg.text
       .replace("/factcheck", "")
@@ -542,52 +470,14 @@ class CommandHandler {
 
   // 📰 КОМАНДА НОВИН
   static async news(msg, bot) {
-    // Skip old messages to prevent startup spam
-    if (this.isOldMessage(msg)) return;
+    const context = await this.validateCommand(msg, bot, {
+      enforceSearchLimit: true,
+      searchLogEmoji: "📰",
+      searchLogLabel: "News",
+    });
+    if (!context) return;
 
-    const chatId = msg.chat.id;
-    const userId = msg.from.id;
-    const chatType = msg.chat.type;
-
-    // перевіряємо чи бот має відповідати
-    if (!botStateService.shouldRespond(userId)) {
-      const statusMessage = botStateService.getStatusMessage(
-        userId,
-        languageService
-      );
-      return await bot.sendMessage(chatId, statusMessage, {
-        parse_mode: "HTML",
-      });
-    }
-
-    // throttle check для не-адмінів
-    if (!botStateService.isAdmin(userId)) {
-      const throttleCheck = throttleService.canProcessMessage(
-        userId,
-        chatId,
-        chatType
-      );
-      if (!throttleCheck.allowed) {
-        await this.handleThrottleResponse(
-          throttleCheck,
-          userId,
-          chatId,
-          bot,
-          msg.message_id
-        );
-        return;
-      }
-
-      // Додаткова перевірка для пошукових запитів (3 на годину)
-      const searchCheck = throttleService.canMakeSearchQuery(userId);
-      if (!searchCheck.allowed) {
-        // Тихо ігноруємо перевищення ліміту пошуку - не відправляємо повідомлення
-        console.log(
-          `📰 News throttled for user ${userId}: reached 3 queries per hour limit`
-        );
-        return;
-      }
-    }
+    const { chatId, userId } = context;
 
     const topic =
       msg.text.replace("/news", "").replace("/новини", "").trim() ||
