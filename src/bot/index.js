@@ -5,6 +5,7 @@ const messageHandler = require("./handlers/messages");
 const callbackHandler = require("./handlers/callbacks");
 const geminiService = require("./services/gemini");
 const languageService = require("./services/language");
+const logger = require("../utils/logger");
 
 class GryagBot {
   constructor() {
@@ -66,17 +67,17 @@ class GryagBot {
 
   setupErrorHandling() {
     this.bot.on("error", (error) => {
-      console.error("Bot error:", error);
+      logger.error("Bot error:", error);
     });
 
     this.bot.on("polling_error", (error) => {
-      console.error("Polling error:", error);
+      logger.error("Polling error:", error);
     });
   }
 
   start() {
-    console.log(`🚀 ${config.name} started successfully!`);
-    console.log(`📊 Mode: ${config.polling ? "Polling" : "Webhook"}`);
+    logger.info(`🚀 ${config.name} started successfully!`);
+    logger.debug(`📊 Mode: ${config.polling ? "Polling" : "Webhook"}`);
 
     // Test Gemini connection
     geminiService.testConnection();
@@ -86,13 +87,13 @@ class GryagBot {
     process.on("SIGINT", () => this.stop());
   }
   async stop() {
-    console.log("🛑 Зупинка бота...");
+    logger.info("🛑 Зупинка бота...");
 
     try {
       // Зупинка polling
       if (this.bot) {
         await this.bot.stopPolling();
-        console.log("✅ Telegram polling зупинено");
+        logger.debug("✅ Telegram polling зупинено");
       }
 
       // Очищення PID файлу
@@ -102,12 +103,12 @@ class GryagBot {
 
       if (fs.existsSync(pidFile)) {
         fs.unlinkSync(pidFile);
-        console.log("🗑️ PID файл видалено");
+        logger.debug("🗑️ PID файл видалено");
       }
 
-      console.log("✅ Бот зупинено успішно");
+      logger.info("✅ Бот зупинено успішно");
     } catch (error) {
-      console.error("❌ Помилка при зупинці бота:", error);
+      logger.error("❌ Помилка при зупинці бота:", error);
       throw error;
     }
   }
