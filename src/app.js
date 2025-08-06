@@ -59,8 +59,9 @@ process.on("uncaughtException", (error) => {
 });
 
 // Збереження PID для моніторингу
-const fs = require("fs");
+const fs = require("fs").promises;
 const path = require("path");
+
 
 try {
   const pidFile = path.join(__dirname, "..", "bot.pid");
@@ -69,3 +70,4 @@ try {
 } catch (error) {
   logger.warn("⚠️ Не вдалося зберегти PID файл:", error.message);
 }
+

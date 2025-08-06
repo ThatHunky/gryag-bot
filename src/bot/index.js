@@ -97,13 +97,20 @@ class GryagBot {
       }
 
       // Очищення PID файлу
-      const fs = require("fs");
+      const fs = require("fs").promises;
       const path = require("path");
       const pidFile = path.join(__dirname, "..", "..", "bot.pid");
 
-      if (fs.existsSync(pidFile)) {
-        fs.unlinkSync(pidFile);
-        logger.debug("🗑️ PID файл видалено");
+
+      try {
+        await fs.access(pidFile);
+        await fs.unlink(pidFile);
+        console.log("🗑️ PID файл видалено");
+      } catch (err) {
+        if (err.code !== "ENOENT") {
+          console.warn("⚠️ Не вдалося видалити PID файл:", err.message);
+        }
+
       }
 
       logger.info("✅ Бот зупинено успішно");
