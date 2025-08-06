@@ -5,7 +5,7 @@ const {
 } = require("@google/generative-ai");
 const languageService = require("./language");
 const embeddingService = require("./embedding");
-const fetch = require("node-fetch"); // For image fetching
+// Uses the global `fetch` available in Node.js 18+
 
 class GeminiService {
   constructor() {
