@@ -9,7 +9,31 @@ import math
 
 import aiosqlite
 
-SCHEMA_PATH = Path(__file__).resolve().parent.parent / "db" / "schema.sql"
+
+# Determine the location of the project root dynamically.
+# context_store.py lives at: <project_root>/app/services/context_store.py
+# We need the schema at: <project_root>/db/schema.sql
+# The previous implementation only went up two parents (…/app/app/db) which does not exist
+# inside the container (mounted at /app). We correct this by going up three levels to the
+# project root (parents[2]) and include a fallback to the old (incorrect) path just in case
+# someone has copied the schema elsewhere.
+def _resolve_schema_path() -> Path:
+    candidates: list[Path] = [
+        Path(__file__).resolve().parents[2]
+        / "db"
+        / "schema.sql",  # /app/db/schema.sql (expected)
+        Path(__file__).resolve().parent.parent
+        / "db"
+        / "schema.sql",  # legacy incorrect location
+    ]
+    for p in candidates:
+        if p.exists():
+            return p
+    # Fallback: return first expected path even if missing; init() will raise clearer error
+    return candidates[0]
+
+
+SCHEMA_PATH: Path = _resolve_schema_path()
 
 
 META_KEY_ORDER = [
@@ -58,6 +82,10 @@ class ContextStore:
             if self._initialized:
                 return
             self._db_path.parent.mkdir(parents=True, exist_ok=True)
+            if not SCHEMA_PATH.exists():  # early clear error
+                raise FileNotFoundError(
+                    f"SQLite schema file not found at {SCHEMA_PATH}. Ensure 'db/schema.sql' exists in project root and is mounted into the container."
+                )
             async with aiosqlite.connect(self._db_path) as db:
                 with SCHEMA_PATH.open("r", encoding="utf-8") as fh:
                     await db.executescript(fh.read())
@@ -78,6 +106,7 @@ class ContextStore:
         media: Iterable[dict[str, Any]] | None,
         metadata: dict[str, Any] | None = None,
         embedding: list[float] | None = None,
+        retention_days: int | None = None,
     ) -> None:
         await self.init()
         ts = int(time.time())
@@ -104,6 +133,8 @@ class ContextStore:
                 ),
             )
             await db.commit()
+        if retention_days:
+            await self.prune_old(retention_days)
 
     async def ban_user(self, chat_id: int, user_id: int) -> None:
         await self.init()
@@ -159,7 +190,7 @@ class ContextStore:
         async with aiosqlite.connect(self._db_path) as db:
             db.row_factory = aiosqlite.Row
             async with db.execute(query, params) as cursor:
-                rows = await cursor.fetchall()
+                rows = list(await cursor.fetchall())  # list for reversed()
 
         history: list[dict[str, Any]] = []
         for row in reversed(rows):
@@ -173,13 +204,17 @@ class ContextStore:
                     payload = json.loads(media_json)
                     if isinstance(payload, dict):
                         stored_media = [
-                            part for part in payload.get("media", []) if isinstance(part, dict)
+                            part
+                            for part in payload.get("media", [])
+                            if isinstance(part, dict)
                         ]
                         meta = payload.get("meta", {})
                         if isinstance(meta, dict):
                             stored_meta = meta
                     elif isinstance(payload, list):
-                        stored_media = [part for part in payload if isinstance(part, dict)]
+                        stored_media = [
+                            part for part in payload if isinstance(part, dict)
+                        ]
                 except json.JSONDecodeError:
                     pass
 
@@ -294,4 +329,13 @@ class ContextStore:
                 "INSERT INTO quotas (chat_id, user_id, ts) VALUES (?, ?, ?)",
                 (chat_id, user_id, ts),
             )
+            await db.commit()
+
+    async def prune_old(self, retention_days: int) -> None:
+        await self.init()
+        cutoff = int(time.time()) - retention_days * 86400
+        async with aiosqlite.connect(self._db_path) as db:
+            await db.execute("DELETE FROM messages WHERE ts < ?", (cutoff,))
+            await db.execute("DELETE FROM quotas WHERE ts < ?", (cutoff,))
+            await db.execute("DELETE FROM bans WHERE ts < ?", (cutoff,))
             await db.commit()

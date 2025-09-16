@@ -30,6 +30,8 @@ class Settings(BaseSettings):
     use_redis: bool = Field(False, alias="USE_REDIS")
     redis_url: str | None = Field("redis://localhost:6379/0", alias="REDIS_URL")
     admin_user_ids: list[int] = Field(default_factory=list, alias="ADMIN_USER_IDS")
+    retention_days: int = Field(30, alias="RETENTION_DAYS", ge=1)
+    enable_search_grounding: bool = Field(False, alias="ENABLE_SEARCH_GROUNDING")
 
     @property
     def db_path_str(self) -> str:

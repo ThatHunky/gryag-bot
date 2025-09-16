@@ -158,6 +158,7 @@ async def handle_group_message(
         media=media_parts,
         metadata=user_meta,
         embedding=user_embedding,
+        retention_days=settings.retention_days,
     )
 
     async def search_messages_tool(params: dict[str, Any]) -> str:
@@ -194,8 +195,11 @@ async def handle_group_message(
             )
         return json.dumps({"results": payload})
 
-    tool_definitions = [
-        {"google_search_retrieval": {}},
+    tool_definitions: list[dict[str, Any]] = []
+    if settings.enable_search_grounding:
+        tool_definitions.append({"google_search_retrieval": {}})
+
+    tool_definitions.append(
         {
             "function_declarations": [
                 {
@@ -212,9 +216,7 @@ async def handle_group_message(
                             },
                             "limit": {
                                 "type": "integer",
-                                "minimum": 1,
-                                "maximum": 10,
-                                "description": "Максимум результатів (до 10)",
+                                "description": "Скільки результатів повернути (1-10)",
                             },
                             "thread_only": {
                                 "type": "boolean",
@@ -226,7 +228,7 @@ async def handle_group_message(
                 }
             ]
         }
-    ]
+    )
 
     try:
         reply_text = await gemini_client.generate(
@@ -265,4 +267,5 @@ async def handle_group_message(
         media=None,
         metadata=model_meta,
         embedding=model_embedding,
+        retention_days=settings.retention_days,
     )

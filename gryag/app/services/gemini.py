@@ -4,8 +4,14 @@ import base64
 import asyncio
 import json
 from typing import Any, Awaitable, Callable, Iterable
+import logging
 
 import google.generativeai as genai
+from google.generativeai.types import (
+    HarmBlockThreshold,
+    HarmCategory,
+    SafetySetting,
+)
 
 
 class GeminiError(Exception):
@@ -19,6 +25,37 @@ class GeminiClient:
         genai.configure(api_key=api_key)
         self._model = genai.GenerativeModel(model_name=model)
         self._embed_model = embed_model
+        self._logger = logging.getLogger(__name__)
+        self._search_grounding_supported = True
+        self._safety_settings = [
+            SafetySetting(category=category, threshold=HarmBlockThreshold.BLOCK_NONE)
+            for category in (
+                HarmCategory.HARM_CATEGORY_HARASSMENT,
+                HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+                HarmCategory.HARM_CATEGORY_SEXUAL,
+                HarmCategory.HARM_CATEGORY_SELF_HARM,
+                HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+            )
+        ]
+
+    def _filter_tools(self, tools: list[dict[str, Any]] | None) -> list[dict[str, Any]] | None:
+        if not tools:
+            return None
+        if self._search_grounding_supported:
+            return tools
+        filtered: list[dict[str, Any]] = []
+        for item in tools:
+            if isinstance(item, dict) and "google_search_retrieval" in item:
+                continue
+            filtered.append(item)
+        return filtered
+
+    def _maybe_disable_search_grounding(self, error_message: str) -> bool:
+        if "Search Grounding is not supported" in error_message and self._search_grounding_supported:
+            self._search_grounding_supported = False
+            self._logger.warning("Disabling google_search_retrieval: %s", error_message)
+            return True
+        return False
 
     @staticmethod
     def build_media_parts(media_items: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -47,10 +84,41 @@ class GeminiClient:
             contents.extend(list(history))
         contents.append({"role": "user", "parts": list(user_parts)})
 
+        filtered_tools = self._filter_tools(tools)
         try:
-            response = await self._model.generate_content_async(contents, tools=tools)
+            response = await self._model.generate_content_async(
+                contents,
+                tools=filtered_tools,
+                safety_settings=self._safety_settings,
+            )
         except Exception as exc:  # pragma: no cover - network failure paths
-            raise GeminiError("Gemini request failed") from exc
+            err_text = str(exc)
+            self._logger.exception("Gemini request failed with tools; retrying without tools")
+            retried = False
+            if self._maybe_disable_search_grounding(err_text):
+                filtered_tools = self._filter_tools(tools)
+                if filtered_tools:
+                    try:
+                        response = await self._model.generate_content_async(
+                            contents,
+                            tools=filtered_tools,
+                            safety_settings=self._safety_settings,
+                        )
+                        retried = True
+                    except Exception:
+                        self._logger.exception("Gemini retry with filtered tools failed")
+            if not retried:
+                if filtered_tools:
+                    try:
+                        response = await self._model.generate_content_async(
+                            contents,
+                            safety_settings=self._safety_settings,
+                        )
+                    except Exception as fallback_exc:  # pragma: no cover
+                        self._logger.exception("Gemini retry without tools also failed")
+                        raise GeminiError("Gemini request failed") from fallback_exc
+                else:
+                    raise GeminiError("Gemini request failed") from exc
 
         if tool_callbacks:
             response = await self._handle_tools(
@@ -137,10 +205,36 @@ class GeminiClient:
             if not function_called:
                 break
 
+            filtered_tools = self._filter_tools(tools)
             try:
-                current_response = await self._model.generate_content_async(contents, tools=tools)
+                current_response = await self._model.generate_content_async(
+                    contents,
+                    tools=filtered_tools,
+                    safety_settings=self._safety_settings,
+                )
             except Exception as exc:  # pragma: no cover
-                raise GeminiError("Gemini tool-followup failed") from exc
+                err_text = str(exc)
+                self._logger.exception("Gemini tool-followup failed; retrying without tools")
+                if self._maybe_disable_search_grounding(err_text):
+                    filtered_tools = self._filter_tools(tools)
+                    if filtered_tools:
+                        try:
+                            current_response = await self._model.generate_content_async(
+                                contents,
+                                tools=filtered_tools,
+                                safety_settings=self._safety_settings,
+                            )
+                            continue
+                        except Exception:
+                            self._logger.exception("Gemini follow-up retry with filtered tools failed")
+                try:
+                    current_response = await self._model.generate_content_async(
+                        contents,
+                        safety_settings=self._safety_settings,
+                    )
+                except Exception as fallback_exc:  # pragma: no cover
+                    self._logger.exception("Gemini fallback follow-up failed")
+                    raise GeminiError("Gemini tool-followup failed") from fallback_exc
 
         return current_response
 
