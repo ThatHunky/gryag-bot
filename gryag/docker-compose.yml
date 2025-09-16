@@ -4,8 +4,29 @@ services:
   bot:
     image: python:3.11-slim
     working_dir: /app
-    volumes:
-      - ./:/app
     env_file:
       - .env
-    command: bash -lc "pip install --no-cache-dir -r requirements.txt && python -m app.main"
+    environment:
+      GIT_REPO_URL: https://github.com/ThatHunky/gryag-bot.git
+      GIT_BRANCH: main
+    volumes:
+      - bot_repo:/app
+    restart: unless-stopped
+    command: >
+      bash -lc "set -euo pipefail; \
+      if ! command -v git >/dev/null 2>&1; then \
+        apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/*; \
+      fi; \
+      REPO_URL=\"${GIT_REPO_URL:-https://github.com/ThatHunky/gryag-bot.git}\"; \
+      REPO_BRANCH=\"${GIT_BRANCH:-main}\"; \
+      if [ ! -d /app/.git ]; then \
+        git clone --branch \"${REPO_BRANCH}\" --depth 1 \"${REPO_URL}\" /app; \
+      else \
+        cd /app && git fetch origin \"${REPO_BRANCH}\" && git checkout \"${REPO_BRANCH}\" && git reset --hard origin/\"${REPO_BRANCH}\"; \
+      fi; \
+      cd /app; \
+      pip install --no-cache-dir -r requirements.txt; \
+      python -m app.main"
+
+volumes:
+  bot_repo:

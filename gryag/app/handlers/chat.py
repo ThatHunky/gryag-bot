@@ -113,11 +113,14 @@ async def handle_group_message(
     thread_id = message.message_thread_id
     user_id = message.from_user.id
 
-    if await store.is_banned(chat_id, user_id):
+    is_admin = user_id in settings.admin_user_ids
+
+    if not is_admin and await store.is_banned(chat_id, user_id):
         await message.reply(BANNED_REPLY)
         return
 
-    await store.log_request(chat_id, user_id)
+    if not is_admin:
+        await store.log_request(chat_id, user_id)
 
     if redis_client is not None and redis_quota is not None:
         key, ts = redis_quota
@@ -239,6 +242,8 @@ async def handle_group_message(
             tool_callbacks={"search_messages": search_messages_tool},
         )
     except GeminiError:
+        if not await store.should_send_notice(chat_id, user_id, "api_limit", ttl_seconds=1800):
+            return
         reply_text = ERROR_FALLBACK
 
     if not reply_text:

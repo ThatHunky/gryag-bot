@@ -44,22 +44,50 @@ class ThrottleMiddleware(BaseMiddleware):
 
         chat_id = event.chat.id
         user_id = event.from_user.id
-        limit = self._settings.per_user_per_hour
+        base_limit = self._settings.per_user_per_hour
+
+        if user_id in self._settings.admin_user_ids:
+            data["throttle_passed"] = True
+            return await handler(event, data)
+
+        now = int(time.time())
+        recent_times = await self._store.recent_request_times(
+            chat_id=chat_id,
+            user_id=user_id,
+            window_seconds=3 * 3600,
+            limit=max(20, base_limit * 2),
+        )
+
+        dynamic_limit = base_limit
+        if not recent_times:
+            dynamic_limit = base_limit + max(1, base_limit // 2)
+        else:
+            latest_gap = now - recent_times[0]
+            if latest_gap > 1800 or len(recent_times) < max(1, base_limit // 2):
+                dynamic_limit = base_limit + max(1, base_limit // 2)
+            else:
+                if len(recent_times) >= base_limit:
+                    idx = min(len(recent_times) - 1, base_limit - 1)
+                    span = recent_times[0] - recent_times[idx]
+                    if span < 900:
+                        dynamic_limit = max(1, base_limit - 2)
+
+        recent_count = sum(1 for ts in recent_times if now - ts <= 3600)
 
         redis_meta: tuple[str, int] | None = None
         if self._redis is not None:
-            now = int(time.time())
             key = f"gryag:quota:{chat_id}:{user_id}"
             await self._redis.zremrangebyscore(key, 0, now - 3600)
             redis_count = await self._redis.zcard(key)
-            if redis_count >= limit:
-                await event.reply(SNARKY_REPLY)
+            if redis_count >= dynamic_limit:
+                if await self._store.should_send_notice(chat_id, user_id, "quota_exceeded", ttl_seconds=3600):
+                    await event.reply(SNARKY_REPLY)
                 return None
             redis_meta = (key, now)
         else:
-            count = await self._store.count_requests_last_hour(chat_id, user_id)
-            if count >= limit:
-                await event.reply(SNARKY_REPLY)
+            if recent_count >= dynamic_limit:
+                if await self._store.should_send_notice(chat_id, user_id, "quota_exceeded", ttl_seconds=3600):
+                    await event.reply(SNARKY_REPLY)
                 return None
 
         if redis_meta:

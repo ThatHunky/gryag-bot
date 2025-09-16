@@ -331,6 +331,49 @@ class ContextStore:
             )
             await db.commit()
 
+    async def recent_request_times(
+        self,
+        chat_id: int,
+        user_id: int,
+        window_seconds: int = 3 * 3600,
+        limit: int = 20,
+    ) -> list[int]:
+        await self.init()
+        cutoff = int(time.time()) - window_seconds
+        async with aiosqlite.connect(self._db_path) as db:
+            async with db.execute(
+                "SELECT ts FROM quotas WHERE chat_id = ? AND user_id = ? AND ts >= ? ORDER BY ts DESC LIMIT ?",
+                (chat_id, user_id, cutoff, limit),
+            ) as cursor:
+                rows = await cursor.fetchall()
+        return [int(row[0]) for row in rows]
+
+    async def should_send_notice(
+        self,
+        chat_id: int,
+        user_id: int,
+        kind: str,
+        ttl_seconds: int | None = None,
+    ) -> bool:
+        await self.init()
+        now = int(time.time())
+        async with aiosqlite.connect(self._db_path) as db:
+            async with db.execute(
+                "SELECT ts FROM notices WHERE chat_id = ? AND user_id = ? AND kind = ?",
+                (chat_id, user_id, kind),
+            ) as cursor:
+                row = await cursor.fetchone()
+            if row:
+                last_ts = int(row[0])
+                if ttl_seconds is None or now - last_ts < ttl_seconds:
+                    return False
+            await db.execute(
+                "INSERT OR REPLACE INTO notices (chat_id, user_id, kind, ts) VALUES (?, ?, ?, ?)",
+                (chat_id, user_id, kind, now),
+            )
+            await db.commit()
+        return True
+
     async def prune_old(self, retention_days: int) -> None:
         await self.init()
         cutoff = int(time.time()) - retention_days * 86400
@@ -338,4 +381,5 @@ class ContextStore:
             await db.execute("DELETE FROM messages WHERE ts < ?", (cutoff,))
             await db.execute("DELETE FROM quotas WHERE ts < ?", (cutoff,))
             await db.execute("DELETE FROM bans WHERE ts < ?", (cutoff,))
+            await db.execute("DELETE FROM notices WHERE ts < ?", (cutoff,))
             await db.commit()
