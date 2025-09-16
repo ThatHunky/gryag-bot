@@ -5,6 +5,7 @@ import json
 import time
 from pathlib import Path
 from typing import Any, Iterable
+import math
 
 import aiosqlite
 
@@ -60,6 +61,10 @@ class ContextStore:
             async with aiosqlite.connect(self._db_path) as db:
                 with SCHEMA_PATH.open("r", encoding="utf-8") as fh:
                     await db.executescript(fh.read())
+                try:
+                    await db.execute("ALTER TABLE messages ADD COLUMN embedding TEXT")
+                except aiosqlite.OperationalError:
+                    pass
                 await db.commit()
             self._initialized = True
 
@@ -72,6 +77,7 @@ class ContextStore:
         text: str | None,
         media: Iterable[dict[str, Any]] | None,
         metadata: dict[str, Any] | None = None,
+        embedding: list[float] | None = None,
     ) -> None:
         await self.init()
         ts = int(time.time())
@@ -83,12 +89,50 @@ class ContextStore:
         async with aiosqlite.connect(self._db_path) as db:
             await db.execute(
                 """
-                INSERT INTO messages (chat_id, thread_id, user_id, role, text, media, ts)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO messages (chat_id, thread_id, user_id, role, text, media, embedding, ts)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                (chat_id, thread_id, user_id, role, text, media_json, ts),
+                (
+                    chat_id,
+                    thread_id,
+                    user_id,
+                    role,
+                    text,
+                    media_json,
+                    json.dumps(embedding) if embedding else None,
+                    ts,
+                ),
             )
             await db.commit()
+
+    async def ban_user(self, chat_id: int, user_id: int) -> None:
+        await self.init()
+        ts = int(time.time())
+        async with aiosqlite.connect(self._db_path) as db:
+            await db.execute(
+                "INSERT OR REPLACE INTO bans (chat_id, user_id, ts) VALUES (?, ?, ?)",
+                (chat_id, user_id, ts),
+            )
+            await db.commit()
+
+    async def unban_user(self, chat_id: int, user_id: int) -> None:
+        await self.init()
+        async with aiosqlite.connect(self._db_path) as db:
+            await db.execute(
+                "DELETE FROM bans WHERE chat_id = ? AND user_id = ?",
+                (chat_id, user_id),
+            )
+            await db.commit()
+
+    async def is_banned(self, chat_id: int, user_id: int) -> bool:
+        await self.init()
+        async with aiosqlite.connect(self._db_path) as db:
+            async with db.execute(
+                "SELECT 1 FROM bans WHERE chat_id = ? AND user_id = ? LIMIT 1",
+                (chat_id, user_id),
+            ) as cursor:
+                row = await cursor.fetchone()
+                return row is not None
 
     async def recent(
         self,
@@ -147,6 +191,89 @@ class ContextStore:
                 parts.extend(stored_media)
             history.append({"role": row["role"], "parts": parts or [{"text": ""}]})
         return history
+
+    @staticmethod
+    def _cosine_similarity(a: list[float], b: list[float]) -> float:
+        if not a or not b or len(a) != len(b):
+            return 0.0
+        dot = sum(x * y for x, y in zip(a, b))
+        norm_a = math.sqrt(sum(x * x for x in a))
+        norm_b = math.sqrt(sum(y * y for y in b))
+        if norm_a == 0.0 or norm_b == 0.0:
+            return 0.0
+        return dot / (norm_a * norm_b)
+
+    async def semantic_search(
+        self,
+        chat_id: int,
+        thread_id: int | None,
+        query_embedding: list[float],
+        limit: int = 5,
+    ) -> list[dict[str, Any]]:
+        await self.init()
+        if not query_embedding:
+            return []
+
+        if thread_id is None:
+            query = (
+                "SELECT id, role, text, media, embedding FROM messages "
+                "WHERE chat_id = ? AND embedding IS NOT NULL"
+            )
+            params: tuple[Any, ...] = (chat_id,)
+        else:
+            query = (
+                "SELECT id, role, text, media, embedding FROM messages "
+                "WHERE chat_id = ? AND thread_id = ? AND embedding IS NOT NULL"
+            )
+            params = (chat_id, thread_id)
+
+        async with aiosqlite.connect(self._db_path) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute(query, params) as cursor:
+                rows = await cursor.fetchall()
+
+        scored: list[tuple[float, aiosqlite.Row]] = []
+        for row in rows:
+            embedding_json = row["embedding"]
+            if not embedding_json:
+                continue
+            try:
+                stored_embedding = json.loads(embedding_json)
+                if not isinstance(stored_embedding, list):
+                    continue
+                similarity = self._cosine_similarity(query_embedding, stored_embedding)
+            except (json.JSONDecodeError, TypeError):
+                continue
+            if similarity <= 0:
+                continue
+            scored.append((similarity, row))
+
+        scored.sort(key=lambda item: item[0], reverse=True)
+        top = scored[: max(1, min(limit, 10))]
+
+        results: list[dict[str, Any]] = []
+        for score, row in top:
+            meta: dict[str, Any] = {}
+            media_json = row["media"]
+            if media_json:
+                try:
+                    payload = json.loads(media_json)
+                    if isinstance(payload, dict):
+                        meta_obj = payload.get("meta", {})
+                        if isinstance(meta_obj, dict):
+                            meta = meta_obj
+                except json.JSONDecodeError:
+                    pass
+            results.append(
+                {
+                    "score": float(score),
+                    "text": row["text"] or "",
+                    "metadata": meta,
+                    "role": row["role"],
+                    "message_id": row["id"],
+                }
+            )
+        return results
 
     async def count_requests_last_hour(self, chat_id: int, user_id: int) -> int:
         await self.init()

@@ -1,0 +1,97 @@
+# Python bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+.env/
+
+# Environment & secrets
+.env
+.env.*
+*.env
+
+# Build artefacts
+build/
+dist/
+.eggs/
+*.egg-info/
+*.egg
+pip-wheel-metadata/
+
+# Packaging / installers
+*.whl
+*.spec
+
+# C extensions
+*.so
+
+# Logs & reports
+*.log
+logs/
+htmlcov/
+.coverage
+.coverage.*
+.cache/
+.pytest_cache/
+.tox/
+.nox/
+.mypy_cache/
+.dmypy.json
+.pyre/
+.hypothesis/
+
+# IDEs and editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*.tmp
+*~
+
+# Jupyter
+.ipynb_checkpoints/
+
+# System
+.DS_Store
+Thumbs.db
+
+# Docker / containers
+*.pid
+*.pid.lock
+
+# Databases & storage
+*.sqlite
+*.sqlite3
+*.db
+!db/schema.sql
+*.db-*
+
+# Cache / scratch
+/tmp/
+*.bak
+*.orig
+
+# Tests & coverage artefacts
+coverage.xml
+nosetests.xml
+pytestdebug.log
+
+# Local tooling
+.specstory/
+
+# Editors backup
+*~
+*.kate-swp
+
+# Node/npm leftovers (if any tools pull them)
+node_modules/
+package-lock.json
+
+# Misc
+*.tgz
+*.tar.gz
+

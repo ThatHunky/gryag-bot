@@ -8,6 +8,7 @@ from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 
 from app.config import get_settings
+from app.handlers.admin import router as admin_router
 from app.handlers.chat import router as chat_router
 from app.middlewares.chat_meta import ChatMetaMiddleware
 from app.middlewares.throttle import ThrottleMiddleware
@@ -34,7 +35,11 @@ async def main() -> None:
     store = ContextStore(settings.db_path)
     await store.init()
 
-    gemini_client = GeminiClient(settings.gemini_api_key, settings.gemini_model)
+    gemini_client = GeminiClient(
+        settings.gemini_api_key,
+        settings.gemini_model,
+        settings.gemini_embed_model,
+    )
 
     redis_client: Optional[Any] = None
     if settings.use_redis and redis is not None:
@@ -54,10 +59,12 @@ async def main() -> None:
         ThrottleMiddleware(store, settings, redis_client=redis_client)
     )
 
+    dispatcher.include_router(admin_router)
     dispatcher.include_router(chat_router)
 
     try:
-        await dispatcher.start_polling(bot)
+        await bot.delete_webhook(drop_pending_updates=True)
+        await dispatcher.start_polling(bot, skip_updates=True)
     finally:
         if redis_client is not None:
             try:
